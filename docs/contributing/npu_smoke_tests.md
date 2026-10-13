@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 09/24/2026.
+Last updated: 10/13/2026.
 
 我们在 verl-omni 上增加基于华为昇腾设备的CI用例添加指导。
 
@@ -17,11 +17,11 @@ GitHub Actions 入口为
 | ID | 名称 | 测试入口 | 默认 NPU 数量 | 状态 |
 |---|---|---|---:|---|
 | 0 | vLLM-Omni rollout + sleep/wake-up | `tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py` | 8 | 启用 |
-| 1 | Qwen-Image FlowGRPO trainer e2e | `tests/special_e2e/run_flowgrpo_qwen_image_npu.sh` | 8 | 暂时跳过 |
+| 1 | Qwen-Image FlowGRPO trainer e2e | `tests/special_e2e/run_flowgrpo_qwen_image_npu.sh` | 8 | Enabled |
 
-Test 1 仍保留在 runner 和 workflow 中，但
-`run_npu_smoke_tests.sh` 当前通过 `RUN_TEST[1]=0` 强制将其标记为
-`SKIP`。待 FlowGRPO 运行时问题解决后，删除该临时设置即可恢复。
+Both tests run by default; explicit test IDs select a subset. Test 1 requires
+an even NPU count of at least 2 because its rollout uses tensor parallel size 2.
+Use `--num-npus 2` for an A3 pair.
 
 ## 增加一个新的 NPU Smoke 测试
 
@@ -211,17 +211,25 @@ ASCEND_RT_VISIBLE_DEVICES=0,2,4,6 NUM_NPUS=4 \
   bash tests/npu_smoke/run_npu_smoke_tests.sh 0
 ```
 
-当前请求 Test 1 时，runner 会将其报告为 `SKIP`，不会启动 FlowGRPO：
+Run Test 1 through the same runner:
 
 ```bash
 bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 8 1
 ```
 
-新增 Test 2 后，可以单独运行：
+Run both tests on an A3 pair with a cached local checkpoint:
 
 ```bash
-bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 8 2
+MODEL_PATH=/root/models/tiny-random/Qwen-Image \
+  bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 2
 ```
+
+The smoke runner sets `HF_HUB_OFFLINE=0` because engine-default extraction
+constructs `OmniEngineArgs(model="")`, which fails in HF offline mode with the
+current stack. This setting permits Hub access; it does not require downloading
+models. Test 1 requires existing local model/tokenizer directories and propagates
+this setting and `ASCEND_VISIBLE_DEVICES` to Ray workers. Its generated data is
+stored under the run's log directory unless `DATA_DIR` is explicitly provided.
 
 测试日志默认保存在 `logs/npu_smoke/<timestamp>/`。先查看
 `summary.log`，再根据失败 ID 查看对应的 `test_<id>.log`。
@@ -251,8 +259,7 @@ PR 标签与请求范围：
 | `ci-npu-rollout` | rollout | Test 0 |
 | `ci-npu-flowgrpo` | flowgrpo | Test 1 |
 
-Test 1 暂时禁用期间，即使 workflow 请求 Test 1，runner 也会将其报告为
-`SKIP`。
+Workflow-selected Test 1 now executes normally instead of being forced to `SKIP`.
 
 ## 运行环境
 

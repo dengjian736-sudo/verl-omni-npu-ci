@@ -10,6 +10,15 @@ dummy_train_path=${TRAIN_FILES:-${DATA_DIR}/train.parquet}
 dummy_test_path=${VAL_FILES:-${DATA_DIR}/test.parquet}
 TOTAL_TRAIN_STEPS=${TOTAL_TRAIN_STEPS:-1}
 
+if ! [[ "${NUM_NPUS}" =~ ^[1-9][0-9]*$ ]] || (( NUM_NPUS % 2 != 0 )); then
+    echo "Test 1 requires an even NUM_NPUS >= 2 for tensor parallel size 2." >&2
+    exit 2
+fi
+if [[ ! -d "${MODEL_PATH}" || ! -d "${TOKENIZER_PATH}" ]]; then
+    echo "Test 1 requires local MODEL_PATH and TOKENIZER_PATH directories." >&2
+    exit 2
+fi
+
 ENGINE=vllm_omni
 max_prompt_length=256
 n_resp_per_prompt=2
@@ -18,9 +27,18 @@ micro_bsz=$((micro_bsz_per_npu * NUM_NPUS))
 mini_bsz=${micro_bsz}
 train_batch_size=$((mini_bsz * n_resp_per_prompt))
 
-export ASCEND_RT_VISIBLE_DEVICES=${ASCEND_RT_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}
+if [[ -z "${ASCEND_RT_VISIBLE_DEVICES:-}" ]]; then
+    ASCEND_RT_VISIBLE_DEVICES=0
+    for (( i=1; i<NUM_NPUS; i++ )); do
+        ASCEND_RT_VISIBLE_DEVICES+=",${i}"
+    done
+fi
+export ASCEND_RT_VISIBLE_DEVICES
+export ASCEND_VISIBLE_DEVICES="${ASCEND_VISIBLE_DEVICES:-${ASCEND_RT_VISIBLE_DEVICES}}"
 export DEVICE_NAME=npu
 export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
+# Default engine arguments use model="", which is invalid in HF offline mode.
+export HF_HUB_OFFLINE=0
 
 echo "===== Source Ascend environment (Test 1) ====="
 set +u
@@ -58,6 +76,7 @@ python3 -m verl_omni.trainer.main_diffusion \
     data.max_prompt_length=${max_prompt_length} \
     actor_rollout_ref.model.path=${MODEL_PATH} \
     actor_rollout_ref.model.tokenizer_path=${TOKENIZER_PATH} \
+    actor_rollout_ref.model.algorithm=flow_grpo \
     actor_rollout_ref.model.attn_backend=_native_npu \
     actor_rollout_ref.model.lora_rank=8 \
     actor_rollout_ref.model.lora_alpha=16 \
@@ -74,6 +93,7 @@ python3 -m verl_omni.trainer.main_diffusion \
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
     actor_rollout_ref.rollout.rollout_attn_backend=TORCH_SDPA \
     actor_rollout_ref.rollout.name=${ENGINE} \
+    actor_rollout_ref.rollout.max_num_seqs=1 \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.agent.num_workers=1 \
     actor_rollout_ref.rollout.load_format=safetensors \
@@ -104,6 +124,8 @@ python3 -m verl_omni.trainer.main_diffusion \
     trainer.save_freq=-1 \
     trainer.resume_mode=disable \
     trainer.total_training_steps=${TOTAL_TRAIN_STEPS} \
+    '++ray_kwargs.ray_init.runtime_env.env_vars.HF_HUB_OFFLINE="0"' \
+    "++ray_kwargs.ray_init.runtime_env.env_vars.ASCEND_VISIBLE_DEVICES=\"${ASCEND_VISIBLE_DEVICES}\"" \
     "$@"
 
 echo "FlowGRPO diffusion NPU e2e test passed (training completed successfully)."

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/npu_smoke/run_npu_smoke_tests.sh
 #
-# Offline Ascend NPU smoke-test suite for verl-omni.
+# Ascend NPU smoke-test suite using local model checkpoints.
 #
 # Usage:
 #   bash tests/npu_smoke/run_npu_smoke_tests.sh [--num-npus N] [TEST_IDs...]
@@ -30,6 +30,9 @@ export PYTHONUNBUFFERED=1
 export RAY_DEDUP_LOGS=0
 export DEVICE_NAME=npu
 export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
+# EngineArgs default extraction uses an empty model name, which vLLM rejects
+# in HF offline mode. Tests still load their checkpoints from local paths.
+export HF_HUB_OFFLINE=0
 
 REQUESTED_NUM_NPUS="${NUM_NPUS:-8}"
 declare -a CLI_TEST_IDS=()
@@ -108,20 +111,6 @@ run_test() {
     local rc="${PIPESTATUS[0]}"
     set -e
 
-    # The current Ascend image may abort in native allocator teardown after
-    # the test workload has completed successfully. Accept exit 134 only when
-    # test-specific completion markers are present; other aborts still fail.
-    if [[ "${rc}" -eq 134 ]]; then
-        if [[ "${id}" == "0" ]] && grep -Eq '=+ [0-9]+ passed' "${logfile}"; then
-            warn "[${id}] Ignoring native teardown abort after pytest success"
-            rc=0
-        elif [[ "${id}" == "1" ]] \
-            && grep -q 'training/global_step:1' "${logfile}" \
-            && grep -q 'Training Progress: 100%' "${logfile}"; then
-            warn "[${id}] Ignoring native teardown abort after training step success"
-            rc=0
-        fi
-    fi
     local end_ts; end_ts="$(date +%s)"
     local elapsed=$(( end_ts - start_ts ))
 
@@ -169,9 +158,6 @@ if [[ "${#CLI_TEST_IDS[@]}" -gt 0 ]]; then
     done
 fi
 
-# Temporarily disable Test 1 while the FlowGRPO runtime issue is investigated.
-RUN_TEST[1]=0
-
 cleanup_runtime() {
     ray stop --force || true
     pkill -TERM -f DiffusionWorker || true
@@ -202,6 +188,7 @@ run_selected_test 0 "vllm-omni rollout + sleep/wake_up" \
 cleanup_runtime
 run_selected_test 1 "FlowGRPO trainer e2e" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
+        DATA_DIR="${DATA_DIR:-${LOG_DIR}/test1_data}" \
     bash tests/special_e2e/run_flowgrpo_qwen_image_npu.sh
 
 sep | tee "${SUMMARY_LOG}"
