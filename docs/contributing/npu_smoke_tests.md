@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/16/2026.
+Last updated: 10/20/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -19,6 +19,49 @@ into these runners:
 | 0 | core | vLLM-Omni rollout + sleep/wake-up | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py | 8 |
 | 1 | e2e | Qwen-Image FlowGRPO trainer | tests/special_e2e/run_flowgrpo_qwen_image_npu.sh | 8 |
 | 2 | e2e | Wan2.2 DanceGRPO trainer | tests/special_e2e/run_dancegrpo_wan22_npu.sh | 8 |
+| 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 8 |
+| 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
+| 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
+
+ID 3 is reserved for the FSDP engine migration in PR #770, which is not part of
+this branch. Do not reuse it. The GPU-to-NPU scope and remaining gaps are tracked
+in [NPU smoke coverage](npu_smoke_coverage.md).
+
+Tests 4-6 reuse the GPU tests' execution and assertions. Test 4 contains two
+pytest cases (`request_execution` and `step_execution`); Tests 5 and 6 each
+contain one. They require an even `NUM_NPUS` of at least 2, use rollout TP=2,
+two agent-loop workers, 256x256 images, and a 10-step denoising schedule with
+the same SDE window as the GPU seed test. Serial requests (`max_num_seqs=1`)
+preserve the seed test's batch-shape constraint. Test 6 keeps the bit-equality
+assertion; it does not substitute approximate equality on NPU.
+
+Use the local checkpoint prepared by the workflow. The transformer head count
+must be divisible by 2, and its `joint_attention_dim` must match the text
+encoder's hidden size. The entry point reports missing hardware or assets as
+failures. It does not rewrite the cached model or download weights at runtime.
+The model can be prepared offline in a separate directory:
+
+```bash
+python3 tests/special_e2e/build_qwen_image_tiny_random.py \
+    --output-dir "${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
+```
+
+After sourcing CANN and ATB, run just the new cases from the repository root:
+
+```bash
+export DEVICE_NAME=npu NUM_NPUS=8
+export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export ASCEND_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
+export HCCL_NPU_SOCKET_PORT_RANGE=auto
+python3 -m pytest -v -s tests/agent_loop/test_diffusion_agent_loop_npu.py
+```
+
+For a two-device local check, set both visibility variables to `0,1` and
+`NUM_NPUS=2`. The existing core and combined runners also select Tests 4-6.
+Each case owns a fresh local Ray cluster and restores the agent worker factory
+afterward. Nonzero exits, including teardown aborts for these new IDs, remain
+failures until their behavior is validated in the target environment.
 
 ## Add a New NPU Smoke Test
 
@@ -40,7 +83,7 @@ Keep tests small and reproducible:
 Add core tests to run_npu_smoke_core.sh and trainer tests to
 run_npu_smoke_e2e.sh. Assign the next unused numeric ID and call run_test:
 
-    run_test 3 "my NPU smoke test"         env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}"             NUM_NPUS="${NUM_NPUS}"         pytest -s tests/workers/test_my_npu_feature.py
+    run_test 7 "my NPU smoke test"         env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}"             NUM_NPUS="${NUM_NPUS}"         pytest -s tests/workers/test_my_npu_feature.py
 
 Do not reuse an existing ID. Adding a test to an existing group needs no
 workflow mapping change.
@@ -67,7 +110,7 @@ Multiple labels produce the union of their groups. The workflow invokes group
 scripts in stable core, then e2e, order.
 
 If the new test lives outside current path filters, add its path. Current
-filters include verl_omni/**, tests/npu_smoke/**, tests/workers/**,
+filters include verl_omni/**, tests/npu_smoke/**, tests/agent_loop/**, tests/workers/**,
 tests/special_e2e/**, pyproject.toml, .github/workflows/npu_smoke.yml,
 and .github/vllm_omni_pin.txt.
 
