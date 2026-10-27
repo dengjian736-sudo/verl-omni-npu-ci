@@ -31,8 +31,8 @@ into these runners:
 
 The combined runner has twelve entries: six core (0, 3, 4, 5, 6, 11) and six
 e2e (1, 2, 7, 8, 9, 10). Entry 4 is parametrized with two pytest cases
-(`request_execution` and `step_execution`), so the core group runs seven pytest
-cases in total.
+(`request_execution` and `step_execution`) and entry 11 runs four pytest cases,
+so the core group runs ten pytest cases in total.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -92,21 +92,36 @@ post-pytest teardown abort described below.
 
 ### Standalone reward engine
 
-Test 11 ports `tests/reward_loop/test_visual_reward_manager.py::test_reward_model_genrm`.
-It starts reward-model servers through `RewardLoopManager` with a dedicated
-resource pool and `rollout.name=vllm`; no actor rollout server is created.
+Test 11 ports the whole GPU file `tests/reward_loop/test_visual_reward_manager.py`
+(GPU core ID 5) as four pytest cases at file granularity. The GenRM case starts
+reward-model servers through `RewardLoopManager` with a dedicated resource pool
+and `rollout.name=vllm`; no actor rollout server is created.
 A local random Qwen2.5-VL checkpoint exercises the architecture involved in
 issue #791 without downloading the full reward model. Each launch uses a new,
 test-owned `VLLM_CACHE_ROOT`, so existing architecture-inspection caches cannot
 hide cold-start failures.
 
-At eight NPUs the test starts four TP=2 reward replicas, checks each `/v1/models`
-endpoint, and scores three synthetic images through the reward router and the
-existing OCR scorer. It requires finite `(3, 1)` scores in `[0, 1]` and one model
-response per image. Random weights do not test OCR quality or convergence.
-The dedicated servers stay resident (`free_cache_engine=False`); reward-model
-offload and sleep/wake behavior are outside this case. All nonzero exits,
-including native abort 134, remain failures for this entry.
+At eight NPUs the GenRM case starts four TP=2 reward replicas, checks each
+`/v1/models` endpoint, and scores three synthetic images through the reward
+router and the existing OCR scorer. It requires finite `(3, 1)` scores in
+`[0, 1]` and one model response per image. Random weights do not test OCR
+quality or convergence. The dedicated servers stay resident
+(`free_cache_engine=False`); reward-model offload and sleep/wake behavior are
+outside this case.
+
+The two determinism cases port the GPU bitwise-reproducibility contract:
+`full_determinism=True` with a fixed seed, two independent server runs per case,
+and `torch.equal` on `rm_scores` plus exact string equality on
+`genrm_response`. The single-replica case uses one TP=2 replica and the
+multi-replica case uses two TP=1 replicas, matching the GPU smoke topology.
+Sample images are sized for the tiny Ascend fixture (56x56 with the standalone
+case's `mm_processor_kwargs`); the bit-equality assertions are unchanged.
+
+The rule-reward case keeps `reward_model.enable=False` and scores
+`jpeg_compressibility` samples through the CPU-side scorer with the tiny
+Qwen-Image tokenizer; it adds finite-score assertions to the GPU case's
+print-only contract. All nonzero exits, including native abort 134, remain
+failures for this entry.
 
 ```bash
 NUM_NPUS=8 bash tests/special_e2e/run_reward_engine_npu.sh
@@ -201,10 +216,12 @@ steps and the final process exit code when validating on A2 or A3.
 
 Entries 0-6 and 11 passed together as an eight-entry suite on an 8x Ascend
 910B2 server at PR #789 head `2c2f23f` (core, e2e, and combined raw exit
-codes 0; no teardown-abort classification was used). Entries 7-10 passed
-together with entries 0-3 as a separate eight-entry suite on the same class
-of server from the model-smoke branch. The full twelve-entry combined suite
-has not yet been validated in a single run.
+codes 0; no teardown-abort classification was used); entry 11 covered only
+the GenRM case there, and its three additional reward cases are new on this
+branch. Entries 7-10 passed together with entries 0-3 as a separate
+eight-entry suite on the same class of server from the model-smoke branch.
+The full twelve-entry combined suite has not yet been validated in a single
+run.
 
 ## Add a New NPU Smoke Test
 
