@@ -47,15 +47,18 @@ into these runners:
 | 28 | core | Dual-adapter LoRA FSDP/FSDP2 switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py | 8 |
 | 29 | e2e | Qwen3-TTS Talker full-parameter GRPO | tests/special_e2e/run_qwen3_tts_grpo_npu.sh | 8 |
 | 30 | e2e | Named image previews and MiniMax-H3 offload placeholders | tests/trainer/diffusion/test_artifact_preview_dump_npu.py + tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
+| 31 | e2e | Boogu-Image DiffusionNFT trainer | tests/special_e2e/run_diffusionnft_boogu_image_npu.sh | 8 |
+| 32 | core | Layered LoRA collection from nested FSDP units (Boogu) | tests/utils/test_fsdp_lora_collection_gpu.py | 8 |
+| 33 | core | Diffusers VeOmni engine inference and training | tests/workers/test_diffusers_veomni_engine.py | 8 |
 
-The combined runner has thirty-one entries: thirteen core (0, 3, 4, 5, 6,
-11, 12, 13, 14, 15, 16, 17, 28) and eighteen e2e (1, 2, 7, 8, 9, 10,
-18-27, 29, 30).
+The combined runner has thirty-four entries: fifteen core (0, 3, 4, 5, 6,
+11, 12, 13, 14, 15, 16, 17, 28, 32, 33) and nineteen e2e (1, 2, 7, 8, 9,
+10, 18-27, 29, 30, 31).
 Entry 4 is parametrized with two pytest cases (`request_execution` and
 `step_execution`), entry 11 runs four pytest cases, entry 12 runs five,
 entry 13 runs two, entry 14 runs ten on eight devices, entry 16 runs two
-(with and without the agent reward loop), and entry 28 runs four, so the
-core group runs thirty-five pytest cases in total.
+(with and without the agent reward loop), entry 28 runs four, and entry 32
+runs two, so the core group runs thirty-eight pytest cases in total.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -363,10 +366,24 @@ runner) after device-API-ization: accelerator detection and device counts
 come from `verl.utils.device`, so the four dual-adapter cases
 (switch/copy-EMA x fsdp/fsdp2) execute on Ascend with `DEVICE_NAME=npu`.
 `tests/utils/gpu_test_topology.py` was device-API-ized the same way; GPU
-behavior is unchanged. The Boogu-based layered LoRA collection regression
-(`tests/utils/test_fsdp_lora_collection_gpu.py`) is likewise device-API-ized
-but stays out of the runner until the `boogu` package is available in the
-NPU environment.
+behavior is unchanged.
+
+Test 31 ports GPU diffusion E2E ID 10 (Boogu-Image DiffusionNFT, v0 trainer,
+MODE=t2i). The GPU launcher's CUDA-only preflight now accepts torch_npu when
+the CUDA build is absent; GPU behavior is unchanged. The environment needs
+the `boogu-image` package and OpenCV, and the builder's processor/scheduler
+source assets pre-cached from `Boogu/Boogu-Image-0.1-Base` because runs
+execute with `HF_HUB_OFFLINE=1`.
+
+Test 32 runs the Boogu-based layered LoRA collection regression
+(`tests/utils/test_fsdp_lora_collection_gpu.py`, single-rank, not wired into
+any GPU runner) after the same device-API-ization; it needs `boogu-image`.
+
+Test 33 runs the shared VeOmni engine test (`test_diffusers_veomni_engine.py`,
+GPU core ID 3) after device-API-ization; it needs `veomni==0.1.12` installed
+`--no-deps` exactly as the GPU smoke prepare action does. VeOmni's NPU actor
+support is still being established upstream (#812); a failure here is
+recorded with its stack rather than skipped.
 
 Entry 14 initially failed all six Qwen-Image cases on Ascend with
 `aclnnRmsNorm` shape errors: the shared GPU test derived the text-branch
@@ -395,9 +412,9 @@ after the fix. Entries 15 and 17 passed standalone on the 8x910B2 server at
 `fork_rng` production bug fixed in the dual-GRPO adapter and is re-validated
 with that fix. Entry 28 passes on fsdp2; its two fsdp (FSDP1) cases hit a
 `collect_lora_params` old-vs-default key mismatch on NPU that is recorded for
-follow-up instead of being skipped or relaxed. Entries 18-27 and 29-30 are
-pending hardware validation, and the full thirty-one-entry combined suite has
-not yet been validated in a single run.
+follow-up instead of being skipped or relaxed. Entries 18-27 and 29-33 are
+pending hardware validation, and the full thirty-four-entry combined suite
+has not yet been validated in a single run.
 
 ## Add a New NPU Smoke Test
 

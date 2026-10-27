@@ -60,5 +60,8 @@ run_test 29 "Qwen3-TTS Talker full-parameter GRPO e2e" \
 run_test 30 "named image previews and MiniMax-H3 offload placeholders" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
     pytest -q tests/trainer/diffusion/test_artifact_preview_dump_npu.py tests/pipelines/test_minimax_h3_meta_output_npu.py
+run_test 31 "Boogu-Image DiffusionNFT trainer e2e" \
+    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
+    bash tests/special_e2e/run_diffusionnft_boogu_image_npu.sh
 cleanup_runtime
 print_summary

@@ -45,5 +45,11 @@ run_test 17 "OmniAgentLoopWorker image_gen tool agent loop" \
 run_test 28 "dual-adapter LoRA FSDP/FSDP2 switch and EMA" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" DEVICE_NAME=npu \
     python3 -m pytest -s tests/workers/test_diffusers_fsdp_lora_adapter.py
+run_test 32 "layered LoRA collection from nested FSDP units (Boogu)" \
+    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" DEVICE_NAME=npu \
+    python3 -m pytest -s tests/utils/test_fsdp_lora_collection_gpu.py
+run_test 33 "diffusers VeOmni engine inference and training" \
+    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" DEVICE_NAME=npu \
+    python3 -m pytest -s tests/workers/test_diffusers_veomni_engine.py
 cleanup_runtime
 print_summary
