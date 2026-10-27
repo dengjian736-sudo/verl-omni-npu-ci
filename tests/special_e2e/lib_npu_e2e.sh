@@ -21,6 +21,9 @@ export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
 export HCCL_NPU_SOCKET_PORT_RANGE="${HCCL_NPU_SOCKET_PORT_RANGE:-auto}"
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
+# vllm-ascend rejects FRACTAL_NZ weights on wake_up in RL scenarios; keep NZ
+# off for every NPU e2e entry (same guard the Qwen3-Omni launcher uses).
+export VLLM_ASCEND_ENABLE_NZ="${VLLM_ASCEND_ENABLE_NZ:-0}"
 
 set +u
 source "${ASCEND_HOME_PATH:-/usr/local/Ascend/ascend-toolkit/latest}/set_env.sh"
@@ -56,4 +59,6 @@ NPU_RUNTIME_ARGS=(
     '++ray_kwargs.ray_init.runtime_env.env_vars.RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES="1"'
     '++ray_kwargs.ray_init.runtime_env.env_vars.HF_HUB_OFFLINE="1"'
     '++ray_kwargs.ray_init.runtime_env.env_vars.TRANSFORMERS_OFFLINE="1"'
+    '++ray_kwargs.ray_init.runtime_env.env_vars.VLLM_ASCEND_ENABLE_NZ="0"'
+    '++actor_rollout_ref.rollout.engine_kwargs.vllm_omni.additional_config.weight_nz_mode=0'
 )
