@@ -443,8 +443,14 @@ collection, single rank) passed at `69d94f7`. Entry 31 needs the Boogu source
 assets pre-cached from HF (offline runs cannot fetch them) and is pending a
 networked precache. The Qwen3-Omni and Qwen3-TTS entries 27/29 and the
 manual-tier H3 sync (both TP=2 regressions) and SD3.5 offline DPO passed
-after their fixes. The full thirty-one-entry combined suite has not yet been
-validated in a single run.
+after their fixes.
+
+The full thirty-one-entry combined suite passed in a single run on the 8x
+Ascend 910B2 server at `10f84a3`: core group 14/14 PASS (59 minutes) and
+e2e group 17/17 PASS (105 minutes), both group raw exit codes 0, with no
+teardown-abort compatibility classification and no warnings-suppressed
+entries. Per-entry wall times ranged from 32s (device-residency pytest) to
+845s (four-case reward engine entry).
 
 ## Add a New NPU Smoke Test
 
