@@ -24,5 +24,11 @@ run_test 6 "seeded multi-worker rollout reproducibility" \
 run_test 11 "standalone vLLM reward engine startup + OCR scoring" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
     bash tests/special_e2e/run_reward_engine_npu.sh
+run_test 12 "rollout request batching + step-execution contracts" \
+    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
+    python3 -m pytest -s tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py
+run_test 13 "diffusers FSDP/FSDP2 engine with sequence parallel 2" \
+    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
+    pytest -s tests/workers/test_diffusers_fsdp_engine_sp_npu.py
 cleanup_runtime
 print_summary

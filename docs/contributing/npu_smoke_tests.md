@@ -28,19 +28,23 @@ into these runners:
 | 9 | e2e | Qwen3-Omni multimodal offline DPO trainer | tests/special_e2e/run_qwen3_omni_npu.sh offline-dpo | 8 |
 | 10 | e2e | Qwen3-Omni Thinker separate-async GSPO trainer | tests/special_e2e/run_qwen3_omni_npu.sh separate-async | 8 |
 | 11 | core | Standalone vLLM reward engine and OCR scoring | tests/special_e2e/run_reward_engine_npu.sh | 8 |
+| 12 | core | Rollout request batching and step-execution contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 8 |
+| 13 | core | Diffusers FSDP/FSDP2 engine with sequence parallel 2 | tests/workers/test_diffusers_fsdp_engine_sp_npu.py | 8 |
 
-The combined runner has twelve entries: six core (0, 3, 4, 5, 6, 11) and six
-e2e (1, 2, 7, 8, 9, 10). Entry 4 is parametrized with two pytest cases
-(`request_execution` and `step_execution`) and entry 11 runs four pytest cases,
-so the core group runs ten pytest cases in total.
+The combined runner has fourteen entries: eight core (0, 3, 4, 5, 6, 11, 12,
+13) and six e2e (1, 2, 7, 8, 9, 10). Entry 4 is parametrized with two pytest
+cases (`request_execution` and `step_execution`), entry 11 runs four pytest
+cases, entry 12 runs five, and entry 13 runs two, so the core group runs
+seventeen pytest cases in total.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
 inference/training exercise, with `_native_npu` attention and sequence parallel
 size 1. It requires at least two visible NPUs and a local tiny Qwen-Image model.
-FSDP2 and sequence-parallel execution are not covered by this NPU case.
-The test checks finite inference log probabilities, training loss, and gradient
-norm; it does not establish GPU/NPU numerical parity or model convergence.
+FSDP2 and sequence-parallel execution are covered by Test 13 below, not by this
+case. The test checks finite inference log probabilities, training loss, and
+gradient norm; it does not establish GPU/NPU numerical parity or model
+convergence.
 
 Run only the migrated case from the repository root after sourcing CANN/ATB:
 
@@ -143,6 +147,37 @@ These results identify an environment-sensitive failure mode, not a repair of
 the underlying native heap corruption. The launcher does not select an allocator
 or suppress failures; retain the allocator setup when recording run conditions.
 
+### Rollout contracts and FSDP2/SP engine cases
+
+Test 12 ports the remaining cases of
+`tests/workers/rollout/rollout_vllm/test_vllm_omni_generate.py` (GPU core
+ID 1) that Test 0 does not cover: request-level batching with named media
+artifacts (`output_type` image and latent, four concurrent prompts under
+`max_num_seqs>1` plus `request_batch_max_wait_ms`), and the FlowGRPO,
+DiffusionNFT, and online-DPO `step_execution=True` trajectory contracts. The
+contract assertions are imported verbatim from the GPU module, so both devices
+enforce identical output contracts (artifact specs and dtypes, CPU-resident
+artifacts, `visual_reward_frames` projection, trajectory shape relations,
+fp32 `latents_clean`, and preserved `None` negative-embed keys). Each server
+runs TP=1 on a single NPU, mirroring the GPU topology; `ray.get` timeouts are
+relaxed from 600s to 900s for the slower device. The upstream-skipped GPU
+`test_generate` (mixed-logprobs batching) stays out of scope on both sides.
+
+Test 13 closes the two dimensions of GPU core ID 2 that Test 3 pins away:
+`strategy` in {`fsdp`, `fsdp2`} crossed with `ulysses_sequence_parallel_size=2`
+at `fsdp_size=NUM_NPUS`. It reuses the GPU test's SP-compatible heads=2 model
+fixture, config builder, and engine batches, and keeps Test 3's contract
+assertions (finite inference log probabilities, training loss, and gradient
+norm). The actor uses Diffusers `native` SDPA because the NPU-specific
+context-parallel attention backend does not implement backward in the pinned
+stack. Numerical parity with the GPU run is not established.
+
+```bash
+DEVICE_NAME=npu NUM_NPUS=8 pytest -s tests/workers/test_diffusers_fsdp_engine_sp_npu.py
+DEVICE_NAME=npu NUM_NPUS=8 python3 -m pytest -s \
+    tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py
+```
+
 ### MiniMax-H3 and Qwen3-Omni model smoke
 
 Test 7 reuses GPU diffusion E2E ID 7: tiny MiniMax-H3 text-to-video-and-audio
@@ -220,8 +255,8 @@ codes 0; no teardown-abort classification was used); entry 11 covered only
 the GenRM case there, and its three additional reward cases are new on this
 branch. Entries 7-10 passed together with entries 0-3 as a separate
 eight-entry suite on the same class of server from the model-smoke branch.
-The full twelve-entry combined suite has not yet been validated in a single
-run.
+Entries 12 and 13 are new on this branch. The full fourteen-entry combined
+suite has not yet been validated in a single run.
 
 ## Add a New NPU Smoke Test
 
@@ -243,7 +278,7 @@ Keep tests small and reproducible:
 Add core tests to run_npu_smoke_core.sh and trainer tests to
 run_npu_smoke_e2e.sh. Assign an unused numeric ID and call run_test:
 
-    run_test 12 "my NPU smoke test" \
+    run_test 14 "my NPU smoke test" \
         env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" \
             NUM_NPUS="${NUM_NPUS}" \
         pytest -s tests/workers/test_my_npu_feature.py
