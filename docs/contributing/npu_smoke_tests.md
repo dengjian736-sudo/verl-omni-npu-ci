@@ -38,11 +38,11 @@ into these runners:
 | 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync trainer | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 8 |
 | 20 | e2e | Qwen-Image online DPO V1 sync trainer | tests/special_e2e/run_online_dpo_qwen_image_npu.sh | 8 |
 | 21 | e2e | DiffusionNFT V1 sync trainer | tests/special_e2e/run_diffusionnft_qwen_image_npu.sh | 8 |
-| 22 | e2e | FlowGRPO V1 separate_async trainer (HCCL ckpt) | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 8 |
+| 22 | e2e | FlowGRPO V1 separate_async trainer | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 8 |
 | 23 | e2e | Diffusion OPD V1 sync colocated teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh (SMOKE=sync) | 8 |
 | 24 | e2e | Diffusion OPD V1 separate_async standalone teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh (SMOKE=async) | 8 |
 | 25 | e2e | Bagel PickScore LoRA FlowGRPO (v0 trainer) | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 8 |
-| 26 | e2e | FlowGRPO synchronous separate trainer (v0, HCCL ckpt) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
+| 26 | e2e | FlowGRPO synchronous separate trainer (v0) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
 | 27 | e2e | MiniCPM-o 4.5 Thinker GSPO LoRA (collocated sync, V1) | tests/special_e2e/run_gspo_minicpmo_thinker_lora_v1_npu.sh | 8 |
 | 28 | core | Dual-adapter LoRA FSDP2 switch and EMA (FSDP1 deselected, deferred) | tests/workers/test_diffusers_fsdp_lora_adapter.py | 8 |
 | 29 | e2e | Qwen3-TTS Talker full-parameter GRPO | tests/special_e2e/run_qwen3_tts_grpo_npu.sh | 8 |
@@ -332,10 +332,12 @@ The GPU launchers select native/TORCH_SDPA attention automatically because
   `main_diffusion` trainer and does not cover the V1 sync path.
 - 19 (Qwen-Image-Edit): the tiny edit checkpoint is built offline by the
   wrapper before delegating to the GPU launcher.
-- 22/26 (separate_async, v0 separate): use verl's HCCL checkpoint engine
-  (`CKPT_BACKEND=hccl`), the Ascend counterpart of the cupy-based NCCL
-  engine; at eight NPUs the default split is four actor ranks plus four
-  standalone TP=1 rollout replicas.
+- 22/26 (separate_async, v0 separate): keep the launcher default
+  `CKPT_BACKEND=nccl`, which verl resolves to its `HCCLCheckpointEngine`
+  on Ascend (the CUDA/NPU checkpoint engines register under the same
+  name and are mutually exclusive by construction; the cupy-based NCCL
+  module simply fails to import there). At eight NPUs the default split
+  is four actor ranks plus four standalone TP=1 rollout replicas.
 - 23/24 (OPD teachers): reuse the GPU launcher's offline tiny SD3 builds
   (student + two teachers, three seeds) and its SMOKE=sync/async modes.
 - 25 (Bagel PickScore): deprecated v0 trainer kept covered until the Bagel
