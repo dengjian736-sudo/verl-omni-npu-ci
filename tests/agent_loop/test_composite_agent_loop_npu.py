@@ -28,7 +28,7 @@ import pytest
 
 
 @pytest.fixture
-def npu_composite_config(tmp_path_factory):
+def npu_composite_config():
     """Create an isolated NPU Ray cluster and configure composite AR+DiT rollout."""
     import ray
     import torch
@@ -36,8 +36,6 @@ def npu_composite_config(tmp_path_factory):
     from hydra import compose, initialize_config_dir
     from omegaconf import OmegaConf
     from verl.experimental.agent_loop.agent_loop import AgentLoopManager
-
-    from tests.agent_loop.test_composite_agent_loop import _create_tp_compatible_model
 
     if not torch.npu.is_available():
         pytest.fail("These smoke tests require Ascend NPUs and torch-npu.")
@@ -70,8 +68,11 @@ def npu_composite_config(tmp_path_factory):
     if transformer["joint_attention_dim"] != text_hidden_size:
         pytest.fail("Transformer joint_attention_dim must match the local text encoder hidden_size.")
 
-    tmp_dir = str(tmp_path_factory.mktemp("qwen_image_model"))
-    model_path = _create_tp_compatible_model(tmp_dir, str(base_model_path), num_attention_heads=2)
+    # The local tiny checkpoint is already TP=2 compatible (even head count,
+    # joint_attention_dim matched to the text encoder above); unlike the GPU
+    # HF fixture it needs no transformer rebuild, which would desynchronize
+    # joint_attention_dim from the copied text encoder.
+    model_path = str(base_model_path)
 
     config_dir = Path(__file__).resolve().parents[2] / "verl_omni/trainer/config"
     with initialize_config_dir(config_dir=str(config_dir), version_base="1.3"):
