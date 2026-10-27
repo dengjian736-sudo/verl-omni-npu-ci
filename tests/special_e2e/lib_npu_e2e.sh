@@ -61,4 +61,7 @@ NPU_RUNTIME_ARGS=(
     '++ray_kwargs.ray_init.runtime_env.env_vars.TRANSFORMERS_OFFLINE="1"'
     '++ray_kwargs.ray_init.runtime_env.env_vars.VLLM_ASCEND_ENABLE_NZ="0"'
     '++actor_rollout_ref.rollout.engine_kwargs.vllm_omni.additional_config.weight_nz_mode=0'
+    # vllm-ascend defaults weight_nz_mode=1 and wake_up rejects FRACTAL_NZ in RL
+    # scenarios; reward-model vLLM servers sleep/wake too, so guard them as well.
+    '++reward.reward_model.rollout.engine_kwargs.vllm.additional_config.weight_nz_mode=0'
 )
