@@ -45,9 +45,12 @@ into these runners:
 | 26 | e2e | FlowGRPO synchronous separate trainer (v0, HCCL ckpt) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
 | 27 | e2e | MiniCPM-o 4.5 Thinker GSPO LoRA (collocated sync, V1) | tests/special_e2e/run_gspo_minicpmo_thinker_lora_v1_npu.sh | 8 |
 | 28 | core | Dual-adapter LoRA FSDP/FSDP2 switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py | 8 |
+| 29 | e2e | Qwen3-TTS Talker full-parameter GRPO | tests/special_e2e/run_qwen3_tts_grpo_npu.sh | 8 |
+| 30 | e2e | Named image previews and MiniMax-H3 offload placeholders | tests/trainer/diffusion/test_artifact_preview_dump_npu.py + tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
 
-The combined runner has twenty-nine entries: thirteen core (0, 3, 4, 5, 6,
-11, 12, 13, 14, 15, 16, 17, 28) and sixteen e2e (1, 2, 7, 8, 9, 10, 18-27).
+The combined runner has thirty-one entries: thirteen core (0, 3, 4, 5, 6,
+11, 12, 13, 14, 15, 16, 17, 28) and eighteen e2e (1, 2, 7, 8, 9, 10,
+18-27, 29, 30).
 Entry 4 is parametrized with two pytest cases (`request_execution` and
 `step_execution`), entry 11 runs four pytest cases, entry 12 runs five,
 entry 13 runs two, entry 14 runs ten on eight devices, entry 16 runs two
@@ -341,6 +344,19 @@ The builder downloads the pinned MiniCPM-o remote-code source checkpoint on
 first use; pre-cache it once with HF online because test runs execute with
 `HF_HUB_OFFLINE=1`.
 
+Test 30 ports GPU diffusion E2E ID 11 (the device-residency regressions
+`test_artifact_preview_dump.py` and `test_minimax_h3_meta_output.py`): NPU
+copies assert the same PNG dump sizes/pixels, latent immutability, H3 meta
+placeholder pass-through and exact prompt-embed/latent values with `npu`
+device placement, reusing the CPU-module helpers.
+
+Test 29 ports GPU omni E2E ID 3 (Qwen3-TTS Talker full-parameter GRPO, two
+updates, in-process CPU reward, exact global_step completion check). It
+requires the GPU smoke prepare parity installs in the environment — the
+pinned `qwen-tts` archive with `--no-deps`, `sox` and the audio extras — and
+the pinned tiny-random-qwen3-tts source revision pre-cached in the HF cache,
+because runs execute with `HF_HUB_OFFLINE=1`.
+
 Test 28 runs the shared GPU file
 `tests/workers/test_diffusers_fsdp_lora_adapter.py` (not wired into any GPU
 runner) after device-API-ization: accelerator detection and device counts
@@ -374,8 +390,14 @@ Entries 12-28 are new on this branch. Entry 12 passed standalone on an 8x
 Ascend 910B2 server at `97ed9b2` (5 passed, raw exit 0) and entry 13 at
 `f942088` (2 passed, raw exit 0). Entry 14's first run exposed the
 fixture-width and exit-code defects described above; it is re-validated
-after the fix. Entries 15-28 are pending hardware validation, and the full
-twenty-nine-entry combined suite has not yet been validated in a single run.
+after the fix. Entries 15 and 17 passed standalone on the 8x910B2 server at
+`c8a1b71` (raw exit 0 each); entry 16's first run exposed the CUDA-only
+`fork_rng` production bug fixed in the dual-GRPO adapter and is re-validated
+with that fix. Entry 28 passes on fsdp2; its two fsdp (FSDP1) cases hit a
+`collect_lora_params` old-vs-default key mismatch on NPU that is recorded for
+follow-up instead of being skipped or relaxed. Entries 18-27 and 29-30 are
+pending hardware validation, and the full thirty-one-entry combined suite has
+not yet been validated in a single run.
 
 ## Add a New NPU Smoke Test
 

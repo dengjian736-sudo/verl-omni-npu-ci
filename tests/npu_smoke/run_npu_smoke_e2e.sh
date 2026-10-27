@@ -54,5 +54,11 @@ run_test 26 "FlowGRPO synchronous separate trainer e2e (v0, HCCL ckpt)" \
 run_test 27 "MiniCPM-o 4.5 Thinker GSPO LoRA e2e (collocated sync, V1)" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
     bash tests/special_e2e/run_gspo_minicpmo_thinker_lora_v1_npu.sh
+run_test 29 "Qwen3-TTS Talker full-parameter GRPO e2e" \
+    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
+    bash tests/special_e2e/run_qwen3_tts_grpo_npu.sh
+run_test 30 "named image previews and MiniMax-H3 offload placeholders" \
+    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
+    pytest -q tests/trainer/diffusion/test_artifact_preview_dump_npu.py tests/pipelines/test_minimax_h3_meta_output_npu.py
 cleanup_runtime
 print_summary
