@@ -25,6 +25,7 @@ from pathlib import Path
 
 import torch
 from diffusers import MiniMaxH3Transformer3DModel
+from verl.utils.device import get_device_name, get_torch_device
 from vllm.config import VllmConfig, set_current_vllm_config
 from vllm.distributed import (
     destroy_distributed_environment,
@@ -111,8 +112,8 @@ def main():
     )
     args = parser.parse_args()
     rank, local_rank, tp = (int(os.environ[key]) for key in ("RANK", "LOCAL_RANK", "WORLD_SIZE"))
-    torch.cuda.set_device(local_rank)
-    device = torch.device("cuda", local_rank)
+    get_torch_device().set_device(local_rank)
+    device = torch.device(get_device_name(), local_rank)
     with set_current_vllm_config(VllmConfig()):
         init_distributed_environment(local_rank=local_rank)
         initialize_model_parallel(tensor_model_parallel_size=tp)
