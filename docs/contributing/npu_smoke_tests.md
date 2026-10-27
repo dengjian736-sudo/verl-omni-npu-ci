@@ -47,12 +47,12 @@ into these runners:
 | 28 | core | Dual-adapter LoRA FSDP2 switch and EMA (FSDP1 deselected, deferred) | tests/workers/test_diffusers_fsdp_lora_adapter.py | 8 |
 | 29 | e2e | Qwen3-TTS Talker full-parameter GRPO | tests/special_e2e/run_qwen3_tts_grpo_npu.sh | 8 |
 | 30 | e2e | Named image previews and MiniMax-H3 offload placeholders | tests/trainer/diffusion/test_artifact_preview_dump_npu.py + tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
-| 31 | e2e | Boogu-Image DiffusionNFT trainer | tests/special_e2e/run_diffusionnft_boogu_image_npu.sh | 8 |
+| 31 | e2e | Boogu-Image DiffusionNFT trainer — deferred, unregistered | tests/special_e2e/run_diffusionnft_boogu_image_npu.sh | 8 |
 | 32 | core | Layered LoRA collection from nested FSDP units (Boogu) | tests/utils/test_fsdp_lora_collection_gpu.py | 8 |
 
-The combined runner has thirty-two registered entries: fourteen core
-(0, 3, 4, 5, 6, 11, 12, 13, 14, 15, 16, 17, 28, 32) and eighteen e2e
-(1, 2, 7, 8, 9, 10, 18-26, 29, 30, 31). IDs 27 and 33 keep their numbers
+The combined runner has thirty-one registered entries: fourteen core
+(0, 3, 4, 5, 6, 11, 12, 13, 14, 15, 16, 17, 28, 32) and seventeen e2e
+(1, 2, 7, 8, 9, 10, 18-26, 29, 30). IDs 27, 31 and 33 keep their numbers
 reserved but are unregistered while deferred (see validation status).
 Entry 4 is parametrized with two pytest cases (`request_execution` and
 `step_execution`), entry 11 runs four pytest cases, entry 12 runs five,
@@ -385,10 +385,14 @@ behavior is unchanged.
 
 Test 31 ports GPU diffusion E2E ID 10 (Boogu-Image DiffusionNFT, v0 trainer,
 MODE=t2i). The GPU launcher's CUDA-only preflight now accepts torch_npu when
-the CUDA build is absent; GPU behavior is unchanged. The environment needs
-the `boogu-image` package and OpenCV, and the builder's processor/scheduler
-source assets pre-cached from `Boogu/Boogu-Image-0.1-Base` because runs
-execute with `HF_HUB_OFFLINE=1`.
+the CUDA build is absent; GPU behavior is unchanged. The tiny checkpoint
+builds offline from pre-cached `Boogu/Boogu-Image-0.1-Base` processor and
+scheduler assets. However, every training step then fails inside the Boogu
+RoPE path: `aclnnGather` rejects complex tensors ("Tensor self not
+implemented for DT_COMPLEX128", error 161002/EZ1001) and Ascend's gather
+kernel ships no complex dtype support. The entry is unregistered while
+deferred as a vendor-level op gap (the manual `run_flowgrpo_boogu_image_npu.sh`
+hits the same wall); wrapper, assets and ID stay reserved.
 
 Test 32 runs the Boogu-based layered LoRA collection regression
 (`tests/utils/test_fsdp_lora_collection_gpu.py`, single-rank, not wired into
@@ -439,7 +443,7 @@ collection, single rank) passed at `69d94f7`. Entry 31 needs the Boogu source
 assets pre-cached from HF (offline runs cannot fetch them) and is pending a
 networked precache. The Qwen3-Omni and Qwen3-TTS entries 27/29 and the
 manual-tier H3 sync (both TP=2 regressions) and SD3.5 offline DPO passed
-after their fixes. The full thirty-two-entry combined suite has not yet been
+after their fixes. The full thirty-one-entry combined suite has not yet been
 validated in a single run.
 
 ## Add a New NPU Smoke Test
