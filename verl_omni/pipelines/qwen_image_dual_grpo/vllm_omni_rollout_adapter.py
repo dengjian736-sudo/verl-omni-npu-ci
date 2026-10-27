@@ -144,10 +144,15 @@ class QwenImagePipelineWithDualLogProb(QwenImagePipelineWithLogProb):
     ):
         # Sampling reads the process-global RNG. Fork that state so this seed
         # stays inside this generate and is restored before DiT runs.
+        # torch.random.fork_rng only saves/restores CUDA device state, so fork
+        # the CPU and accelerator generators manually (same get/set_rng_state
+        # calls fork_rng makes) to keep this path device-neutral.
         seed = ar_kwargs.pop("seed", None)
         device = torch.device(self.device)
-        fork_devices = [device] if seed is not None and device.type != "cpu" else []
-        with torch.random.fork_rng(devices=fork_devices, enabled=seed is not None):
+        device_mod = None if device.type == "cpu" else torch.get_device_module(device)
+        cpu_rng_state = torch.get_rng_state() if seed is not None else None
+        device_rng_state = device_mod.get_rng_state(device) if seed is not None and device_mod is not None else None
+        try:
             if seed is not None:
                 _seed_rollout_device(int(seed), device)
 
@@ -159,6 +164,12 @@ class QwenImagePipelineWithDualLogProb(QwenImagePipelineWithLogProb):
                 output_scores=return_logprobs,  # apply temperature, top_p, top_k, repetition_penalty
                 **ar_kwargs,
             )
+        finally:
+            if cpu_rng_state is not None:
+                torch.set_rng_state(cpu_rng_state)
+            if device_rng_state is not None and device_mod is not None:
+                with device_mod.device(device):
+                    device_mod.set_rng_state(device_rng_state)
         max_new_tokens = ar_kwargs["max_new_tokens"]
 
         # huggingface generate will stop generating when all the batch reaches [EOS].
