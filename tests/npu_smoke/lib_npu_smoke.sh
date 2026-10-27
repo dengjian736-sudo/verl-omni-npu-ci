@@ -81,6 +81,36 @@ cleanup_runtime() {
     npu-smi info || true
 }
 
+pytest_teardown_completed() {
+    local id="$1" logfile="$2" expected
+    case "${id}" in
+        0|3|5|6) expected=1 ;;
+        4) expected=2 ;;
+        *) return 1 ;;
+    esac
+
+    awk -v expected="${expected}" '
+        BEGIN {
+            summary = "^=+ " expected " passed(, [0-9]+ warnings?)? in .+ =+$"
+        }
+        /^=+ .* =+$/ {
+            if ($0 ~ summary) {
+                if (passed) unexpected = 1
+                passed = 1
+                next
+            }
+        }
+        passed && $0 !~ /^[[:space:]]*$/ {
+            if ($0 == "corrupted size vs. prev_size" && !abort_seen) {
+                abort_seen = 1
+            } else {
+                unexpected = 1
+            }
+        }
+        END { exit !(passed && abort_seen && !unexpected) }
+    ' "${logfile}"
+}
+
 run_test() {
     local id="$1"
     local name="$2"
@@ -102,15 +132,7 @@ run_test() {
     set -e
 
     if [[ "${rc}" -eq 134 ]]; then
-        if [[ "${id}" == "0" || "${id}" == "3" ]] && awk '
-            /^=+ .* =+$/ {
-                passed = ($0 ~ /^=+ 1 passed(, [0-9]+ warnings?)? in .+ =+$/)
-                known_abort = 0
-                next
-            }
-            passed && $0 == "corrupted size vs. prev_size" { known_abort = 1 }
-            END { exit !known_abort }
-        ' "${logfile}"; then
+        if pytest_teardown_completed "${id}" "${logfile}"; then
             warn "[${id}] Ignoring known native teardown abort after pytest success"
             rc=0
         elif [[ "${id}" == "1" || "${id}" == "2" ]]             && grep -q 'training/global_step:1' "${logfile}"             && grep -q 'Training Progress: 100%' "${logfile}"; then

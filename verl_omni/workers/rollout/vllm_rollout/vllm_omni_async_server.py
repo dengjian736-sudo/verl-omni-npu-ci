@@ -379,7 +379,8 @@ class vLLMOmniHttpServer(vLLMHttpServer):
         ):
             acks = await self.engine.wake_up(tags=resolved_tags)
             self._validate_acks("wake_up", acks)
-            await self.engine.resume_generation()
+            if not await self.engine.is_sleeping():
+                await self.engine.resume_generation()
             self._invalidate_lora_request_cache()
 
     async def set_global_steps(self, global_steps: int):
