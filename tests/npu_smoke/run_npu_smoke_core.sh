@@ -42,5 +42,8 @@ run_test 16 "composite agent loop AR+DiT single turn (both reward modes)" \
 run_test 17 "OmniAgentLoopWorker image_gen tool agent loop" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
     python3 -m pytest -s tests/agent_loop/test_omni_agent_loop_worker_npu.py
+run_test 28 "dual-adapter LoRA FSDP/FSDP2 switch and EMA" \
+    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" DEVICE_NAME=npu \
+    python3 -m pytest -s tests/workers/test_diffusers_fsdp_lora_adapter.py
 cleanup_runtime
 print_summary

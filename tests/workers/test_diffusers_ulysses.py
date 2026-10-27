@@ -118,7 +118,11 @@ def _diffusers_ulysses_fwd(sp_size: int, dp_size: int, backend: str):
 
     cfg = _load_config_for_sp(sp_size)
     latent_dim = cfg.get("in_channels", 64)
-    encoder_hidden_dim = cfg.get("cross_attention_dim", cfg.get("encoder_hidden_size", 32))
+    # The text-branch RMSNorm normalizes joint_attention_dim; tiny checkpoints
+    # differ in which alias keys they carry, so fall back to the actual width.
+    encoder_hidden_dim = cfg.get(
+        "cross_attention_dim", cfg.get("encoder_hidden_size", cfg.get("joint_attention_dim", 32))
+    )
 
     module_sp = AutoModel.from_config(cfg, torch_dtype=torch.bfloat16)
     module_sp.enable_parallelism(config=ContextParallelConfig(ulysses_degree=sp_size, mesh=ulysses_device_mesh))
@@ -233,7 +237,11 @@ def _diffusers_ulysses_fwd_bwd(sp_size: int, dp_size: int, backend: str):
 
     cfg = _load_config_for_sp(sp_size)
     latent_dim = cfg.get("in_channels", 64)
-    encoder_hidden_dim = cfg.get("cross_attention_dim", cfg.get("encoder_hidden_size", 32))
+    # The text-branch RMSNorm normalizes joint_attention_dim; tiny checkpoints
+    # differ in which alias keys they carry, so fall back to the actual width.
+    encoder_hidden_dim = cfg.get(
+        "cross_attention_dim", cfg.get("encoder_hidden_size", cfg.get("joint_attention_dim", 32))
+    )
 
     module_sp = AutoModel.from_config(cfg, torch_dtype=torch.bfloat16)
     module_sp.enable_parallelism(config=ContextParallelConfig(ulysses_degree=sp_size, mesh=ulysses_device_mesh))
@@ -509,7 +517,11 @@ def _diffusers_ulysses_fwd_bwd_fsdp(sp_size: int, dp_size: int, backend: str):
 
     cfg = _load_config_for_sp(sp_size)
     latent_dim = cfg.get("in_channels", 64)
-    encoder_hidden_dim = cfg.get("cross_attention_dim", cfg.get("encoder_hidden_size", 32))
+    # The text-branch RMSNorm normalizes joint_attention_dim; tiny checkpoints
+    # differ in which alias keys they carry, so fall back to the actual width.
+    encoder_hidden_dim = cfg.get(
+        "cross_attention_dim", cfg.get("encoder_hidden_size", cfg.get("joint_attention_dim", 32))
+    )
 
     module_sp = AutoModel.from_config(cfg, torch_dtype=torch.bfloat16)
     module_sp.enable_parallelism(config=ContextParallelConfig(ulysses_degree=sp_size, mesh=ulysses_device_mesh))
@@ -624,4 +636,6 @@ def _diffusers_ulysses_fwd_bwd_fsdp(sp_size: int, dp_size: int, backend: str):
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-svv"])
+    # Propagate the pytest exit code so torchrun (and the smoke runners behind
+    # it) fail on test failures instead of exiting 0.
+    raise SystemExit(pytest.main([__file__, "-svv"]))

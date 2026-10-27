@@ -34,13 +34,25 @@ into these runners:
 | 15 | core | Trainable FSDP2 snapshot restore (two-rank) | tests/workers/test_trainable_snapshot_gpu.py | 8 |
 | 16 | core | Composite agent loop AR+DiT single turn | tests/agent_loop/test_composite_agent_loop_npu.py | 8 |
 | 17 | core | OmniAgentLoopWorker image_gen tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 8 |
+| 18 | e2e | Qwen-Image FlowGRPO V1 sync trainer | tests/special_e2e/run_flowgrpo_qwen_image_v1_npu.sh | 8 |
+| 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync trainer | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 8 |
+| 20 | e2e | Qwen-Image online DPO V1 sync trainer | tests/special_e2e/run_online_dpo_qwen_image_npu.sh | 8 |
+| 21 | e2e | DiffusionNFT V1 sync trainer | tests/special_e2e/run_diffusionnft_qwen_image_npu.sh | 8 |
+| 22 | e2e | FlowGRPO V1 separate_async trainer (HCCL ckpt) | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 8 |
+| 23 | e2e | Diffusion OPD V1 sync colocated teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh (SMOKE=sync) | 8 |
+| 24 | e2e | Diffusion OPD V1 separate_async standalone teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh (SMOKE=async) | 8 |
+| 25 | e2e | Bagel PickScore LoRA FlowGRPO (v0 trainer) | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 8 |
+| 26 | e2e | FlowGRPO synchronous separate trainer (v0, HCCL ckpt) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
+| 27 | e2e | MiniCPM-o 4.5 Thinker GSPO LoRA (collocated sync, V1) | tests/special_e2e/run_gspo_minicpmo_thinker_lora_v1_npu.sh | 8 |
+| 28 | core | Dual-adapter LoRA FSDP/FSDP2 switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py | 8 |
 
-The combined runner has eighteen entries: twelve core (0, 3, 4, 5, 6, 11, 12,
-13, 14, 15, 16, 17) and six e2e (1, 2, 7, 8, 9, 10). Entry 4 is parametrized
-with two pytest cases (`request_execution` and `step_execution`), entry 11
-runs four pytest cases, entry 12 runs five, entry 13 runs two, entry 14 runs
-ten on eight devices, and entry 16 runs two (with and without the agent reward
-loop), so the core group runs thirty-one pytest cases in total.
+The combined runner has twenty-nine entries: thirteen core (0, 3, 4, 5, 6,
+11, 12, 13, 14, 15, 16, 17, 28) and sixteen e2e (1, 2, 7, 8, 9, 10, 18-27).
+Entry 4 is parametrized with two pytest cases (`request_execution` and
+`step_execution`), entry 11 runs four pytest cases, entry 12 runs five,
+entry 13 runs two, entry 14 runs ten on eight devices, entry 16 runs two
+(with and without the agent reward loop), and entry 28 runs four, so the
+core group runs thirty-five pytest cases in total.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -295,6 +307,61 @@ The compatibility exceptions for older tests are not applied to these new
 workloads without matching runtime evidence. Record both completed training
 steps and the final process exit code when validating on A2 or A3.
 
+### Diffusion E2E trainer matrix and LoRA adapter cases
+
+Tests 18-26 port the GPU diffusion E2E group (IDs 0-6, 8-10) as thin NPU
+wrappers around the unmodified GPU launchers: `lib_npu_e2e.sh` supplies
+CANN/ATB sourcing, visible-device validation and the `trainer.device=npu`
+plus Ray-visibility runtime args, and each wrapper pins model-specific paths.
+The GPU launchers select native/TORCH_SDPA attention automatically because
+`fa_available()` is false on the pinned Ascend stack. Notes per entry:
+
+- 18/20 (FlowGRPO V1 sync, online DPO): the OCR GenRM reward model defaults
+  to the tiny random Qwen2.5-VL checkpoint from Test 11 (the architecture
+  validated on Ascend in #791 probes) instead of the GPU smoke's tiny
+  qwen3-vl; the weighted multi-reward and pairing contracts are unchanged.
+  Test 18 is the V1 counterpart of Test 1 — Test 1 runs the deprecated v0
+  `main_diffusion` trainer and does not cover the V1 sync path.
+- 19 (Qwen-Image-Edit): the tiny edit checkpoint is built offline by the
+  wrapper before delegating to the GPU launcher.
+- 22/26 (separate_async, v0 separate): use verl's HCCL checkpoint engine
+  (`CKPT_BACKEND=hccl`), the Ascend counterpart of the cupy-based NCCL
+  engine; at eight NPUs the default split is four actor ranks plus four
+  standalone TP=1 rollout replicas.
+- 23/24 (OPD teachers): reuse the GPU launcher's offline tiny SD3 builds
+  (student + two teachers, three seeds) and its SMOKE=sync/async modes.
+- 25 (Bagel PickScore): deprecated v0 trainer kept covered until the Bagel
+  v1 recipe lands upstream; BAGEL-MoT and PickScore tiny checkpoints are
+  built offline by the GPU launcher.
+
+Test 27 ports GPU omni E2E ID 4 (MiniCPM-o 4.5 thinker GSPO LoRA, collocated
+sync V1, frozen vpm/apm towers via exclude_modules + FSDP2 ignored params).
+Rollout TP stays at 2 on eight NPUs while the actor uses all visible ranks.
+The builder downloads the pinned MiniCPM-o remote-code source checkpoint on
+first use; pre-cache it once with HF online because test runs execute with
+`HF_HUB_OFFLINE=1`.
+
+Test 28 runs the shared GPU file
+`tests/workers/test_diffusers_fsdp_lora_adapter.py` (not wired into any GPU
+runner) after device-API-ization: accelerator detection and device counts
+come from `verl.utils.device`, so the four dual-adapter cases
+(switch/copy-EMA x fsdp/fsdp2) execute on Ascend with `DEVICE_NAME=npu`.
+`tests/utils/gpu_test_topology.py` was device-API-ized the same way; GPU
+behavior is unchanged. The Boogu-based layered LoRA collection regression
+(`tests/utils/test_fsdp_lora_collection_gpu.py`) is likewise device-API-ized
+but stays out of the runner until the `boogu` package is available in the
+NPU environment.
+
+Entry 14 initially failed all six Qwen-Image cases on Ascend with
+`aclnnRmsNorm` shape errors: the shared GPU test derived the text-branch
+width from `cross_attention_dim`/`encoder_hidden_size` with a hardcoded 32
+fallback, while the tiny Ascend checkpoint carries only
+`joint_attention_dim=16`; the fallback chain now ends at `joint_attention_dim`
+(GPU fixtures keep their existing keys, so GPU behavior is unchanged). The
+same change makes the file's `__main__` propagate the pytest exit code —
+previously `pytest.main(...)` returned without `sys.exit`, so a torchrun
+launch exited 0 even when cases failed.
+
 ### Validation status of the combined suite
 
 Entries 0-6 and 11 passed together as an eight-entry suite on an 8x Ascend
@@ -303,10 +370,12 @@ codes 0; no teardown-abort classification was used); entry 11 covered only
 the GenRM case there, and its three additional reward cases are new on this
 branch. Entries 7-10 passed together with entries 0-3 as a separate
 eight-entry suite on the same class of server from the model-smoke branch.
-Entries 12-17 are new on this branch. Entry 12 passed standalone on an 8x
-Ascend 910B2 server at `97ed9b2` (5 passed, raw exit 0). Entries 13-17 are
-pending hardware validation, and the full eighteen-entry combined suite has
-not yet been validated in a single run.
+Entries 12-28 are new on this branch. Entry 12 passed standalone on an 8x
+Ascend 910B2 server at `97ed9b2` (5 passed, raw exit 0) and entry 13 at
+`f942088` (2 passed, raw exit 0). Entry 14's first run exposed the
+fixture-width and exit-code defects described above; it is re-validated
+after the fix. Entries 15-28 are pending hardware validation, and the full
+twenty-nine-entry combined suite has not yet been validated in a single run.
 
 ## Add a New NPU Smoke Test
 

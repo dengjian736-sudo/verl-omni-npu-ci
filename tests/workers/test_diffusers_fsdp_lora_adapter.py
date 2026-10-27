@@ -11,7 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""GPU integration tests for dual-adapter LoRA under FSDP/FSDP2."""
+"""Accelerator integration tests for dual-adapter LoRA under FSDP/FSDP2.
+
+Runs on CUDA and, with DEVICE_NAME=npu plus Ascend visibility exported by the
+launcher, on NPU via the verl device API.
+"""
 
 import os
 import shutil
@@ -24,6 +28,7 @@ import torch
 from verl.single_controller.base.decorator import Dispatch, register
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
 from verl.utils import tensordict_utils as tu
+from verl.utils.device import get_torch_device, is_cuda_available, is_npu_available
 
 from verl_omni.workers.engine_workers import TrainingWorker
 from verl_omni.workers.utils.losses import diffusion_loss
@@ -143,7 +148,7 @@ def _assert_ema_blend(
 
 
 def _resolve_lora_test_device_count(strategy: str) -> int:
-    visible_gpus = torch.cuda.device_count()
+    visible_gpus = get_torch_device().device_count()
     device_count = resolve_requested_num_gpus(default_num_gpus=max(2 if strategy == "fsdp2" else 1, visible_gpus))
     if strategy == "fsdp2" and device_count < 2:
         pytest.skip("FSDP2 LoRA adapter tests require at least 2 GPUs to exercise sharded summon/writeback.")
@@ -309,13 +314,13 @@ def _run_copy_ema_adapter_test(strategy: str) -> None:
 
 @pytest.mark.parametrize("strategy", ["fsdp", "fsdp2"])
 def test_diffusers_fsdp_lora_adapter_switch(strategy):
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is required for FSDP LoRA adapter tests.")
+    if not (is_cuda_available or is_npu_available):
+        pytest.skip("A CUDA or Ascend NPU accelerator is required for FSDP LoRA adapter tests.")
     _run_lora_adapter_switch_test(strategy)
 
 
 @pytest.mark.parametrize("strategy", ["fsdp", "fsdp2"])
 def test_diffusers_fsdp_lora_adapter_copy_ema(strategy):
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is required for FSDP LoRA adapter tests.")
+    if not (is_cuda_available or is_npu_available):
+        pytest.skip("A CUDA or Ascend NPU accelerator is required for FSDP LoRA adapter tests.")
     _run_copy_ema_adapter_test(strategy)

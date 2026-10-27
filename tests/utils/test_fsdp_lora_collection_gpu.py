@@ -11,17 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""GPU regression tests for layered LoRA collection from nested FSDP units."""
+"""Accelerator regression tests for layered LoRA collection from nested FSDP units.
+
+Runs on CUDA and, with DEVICE_NAME=npu plus Ascend visibility exported by the
+launcher, on NPU via the verl device API.
+"""
 
 from pathlib import Path
 
 import pytest
-import torch
 import torch.distributed as dist
 from peft import LoraConfig
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import fully_shard
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
+from verl.utils.device import get_nccl_backend, get_torch_device, is_cuda_available, is_npu_available
 from verl.utils.fsdp_utils import fsdp_version
 
 from verl_omni.utils.fsdp_utils import collect_lora_params
@@ -37,15 +41,15 @@ _BOOGU_LAYER_PREFIXES = (
 
 @pytest.fixture(scope="module", autouse=True)
 def _single_rank_process_group(tmp_path_factory):
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is required for FSDP LoRA collection tests.")
+    if not (is_cuda_available or is_npu_available):
+        pytest.skip("A CUDA or Ascend NPU accelerator is required for FSDP LoRA collection tests.")
     if dist.is_initialized():
         yield
         return
 
-    torch.cuda.set_device(0)
+    get_torch_device().set_device(0)
     rendezvous = Path(tmp_path_factory.mktemp("fsdp_lora_dist")) / "init"
-    dist.init_process_group("nccl", init_method=f"file://{rendezvous}", rank=0, world_size=1)
+    dist.init_process_group(get_nccl_backend(), init_method=f"file://{rendezvous}", rank=0, world_size=1)
     try:
         yield
     finally:
@@ -76,7 +80,7 @@ def _build_tiny_boogu_model():
 
 @pytest.mark.parametrize("strategy", ["fsdp", "fsdp2"])
 def test_layered_collection_matches_peft_keys_for_nested_fsdp_units(strategy):
-    model = _build_tiny_boogu_model().to(torch.cuda.current_device())
+    model = _build_tiny_boogu_model().to(get_torch_device().current_device())
     block_types = {
         type(model.double_stream_layers[0]),
         type(model.single_stream_layers[0]),
@@ -89,7 +93,7 @@ def test_layered_collection_matches_peft_keys_for_nested_fsdp_units(strategy):
             model,
             auto_wrap_policy=ModuleWrapPolicy(block_types),
             use_orig_params=True,
-            device_id=torch.cuda.current_device(),
+            device_id=get_torch_device().current_device(),
         )
     else:
         for submodule in model.modules():
