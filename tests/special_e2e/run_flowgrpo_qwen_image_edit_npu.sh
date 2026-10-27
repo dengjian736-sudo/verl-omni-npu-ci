@@ -16,6 +16,11 @@ export NUM_GPUS="${NUM_NPUS}"
 export MODEL_PATH="${MODEL_PATH:-${HOME}/.cache/verl-omni-npu-smoke/qwen-image-edit-plus}"
 export DATA_DIR="${DATA_DIR:-${HOME}/data/dummy_image_edit_npu}"
 unset TRAIN_FILES VAL_FILES
+# The GPU launcher defaults to Hub FA3 at SP=1, which cannot download kernels
+# in the offline NPU environment; select the portable native/SDPA pair (the
+# launcher's own SP>1 branch default).
+export ATTN_BACKEND="${ATTN_BACKEND:-native}"
+export ROLLOUT_ATTN_BACKEND="${ROLLOUT_ATTN_BACKEND:-TORCH_SDPA}"
 
 python3 "${SCRIPT_DIR}/build_qwen_image_edit_plus_tiny_random.py" --output-dir "${MODEL_PATH}"
 
