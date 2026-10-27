@@ -151,7 +151,10 @@ def main() -> None:
         try:
             device = torch.device(get_device_name(), local_rank)
             od_config = OmniDiffusionConfig(
-                model="tiny-minimax-h3-lora-regression",
+                # Offline stacks set H3_SYNC_MODEL_STUB to any existing local
+                # directory so vLLM's repo resolution skips snapshot_download;
+                # weights are built in memory and never loaded from this path.
+                model=os.environ.get("H3_SYNC_MODEL_STUB", "tiny-minimax-h3-lora-regression"),
                 tf_model_config=_vllm_transformer_config(),
                 dtype=torch.float32,
                 parallel_config=DiffusionParallelConfig(tensor_parallel_size=tp_size),

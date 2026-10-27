@@ -20,4 +20,5 @@ unset TRAIN_FILES VAL_FILES DATA_FILE
 exec bash "${SCRIPT_DIR}/run_offline_dpo_sd35.sh" \
     "${NPU_RUNTIME_ARGS[@]}" \
     actor_rollout_ref.model.attn_backend=_native_npu \
+    actor_rollout_ref.rollout.rollout_attn_backend=TORCH_SDPA \
     "$@"

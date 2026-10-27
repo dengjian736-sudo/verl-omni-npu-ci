@@ -123,7 +123,10 @@ def main():
             actor = MiniMaxH3Transformer3DModel(**_TINY_H3)
             original = {name: value.detach().clone() for name, value in actor.named_parameters()}
             config = OmniDiffusionConfig(
-                model="tiny-h3-shared-sync",
+                # Offline stacks set H3_SYNC_MODEL_STUB to any existing local
+                # directory so vLLM's repo resolution skips snapshot_download;
+                # weights are built in memory and never loaded from this path.
+                model=os.environ.get("H3_SYNC_MODEL_STUB", "tiny-h3-shared-sync"),
                 tf_model_config=_vllm_transformer_config(),
                 dtype=torch.bfloat16,
                 parallel_config=DiffusionParallelConfig(tensor_parallel_size=tp),
