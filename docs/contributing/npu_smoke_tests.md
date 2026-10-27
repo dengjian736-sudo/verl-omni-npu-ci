@@ -43,16 +43,17 @@ into these runners:
 | 24 | e2e | Diffusion OPD V1 separate_async standalone teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh (SMOKE=async) | 8 |
 | 25 | e2e | Bagel PickScore LoRA FlowGRPO (v0 trainer) | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 8 |
 | 26 | e2e | FlowGRPO synchronous separate trainer (v0) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
-| 27 | e2e | MiniCPM-o 4.5 Thinker GSPO LoRA (collocated sync, V1) | tests/special_e2e/run_gspo_minicpmo_thinker_lora_v1_npu.sh | 8 |
+| 27 | e2e | MiniCPM-o 4.5 Thinker GSPO LoRA (collocated sync, V1) — deferred, unregistered | tests/special_e2e/run_gspo_minicpmo_thinker_lora_v1_npu.sh | 8 |
 | 28 | core | Dual-adapter LoRA FSDP2 switch and EMA (FSDP1 deselected, deferred) | tests/workers/test_diffusers_fsdp_lora_adapter.py | 8 |
 | 29 | e2e | Qwen3-TTS Talker full-parameter GRPO | tests/special_e2e/run_qwen3_tts_grpo_npu.sh | 8 |
 | 30 | e2e | Named image previews and MiniMax-H3 offload placeholders | tests/trainer/diffusion/test_artifact_preview_dump_npu.py + tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
 | 31 | e2e | Boogu-Image DiffusionNFT trainer | tests/special_e2e/run_diffusionnft_boogu_image_npu.sh | 8 |
 | 32 | core | Layered LoRA collection from nested FSDP units (Boogu) | tests/utils/test_fsdp_lora_collection_gpu.py | 8 |
 
-The combined runner has thirty-three entries: fourteen core (0, 3, 4, 5, 6,
-11, 12, 13, 14, 15, 16, 17, 28, 32) and nineteen e2e (1, 2, 7, 8, 9,
-10, 18-27, 29, 30, 31).
+The combined runner has thirty-two registered entries: fourteen core
+(0, 3, 4, 5, 6, 11, 12, 13, 14, 15, 16, 17, 28, 32) and eighteen e2e
+(1, 2, 7, 8, 9, 10, 18-26, 29, 30, 31). IDs 27 and 33 keep their numbers
+reserved but are unregistered while deferred (see validation status).
 Entry 4 is parametrized with two pytest cases (`request_execution` and
 `step_execution`), entry 11 runs four pytest cases, entry 12 runs five,
 entry 13 runs two, entry 14 runs ten on eight devices, entry 16 runs two
@@ -348,7 +349,13 @@ sync V1, frozen vpm/apm towers via exclude_modules + FSDP2 ignored params).
 Rollout TP stays at 2 on eight NPUs while the actor uses all visible ranks.
 The builder downloads the pinned MiniCPM-o remote-code source checkpoint on
 first use; pre-cache it once with HF online because test runs execute with
-`HF_HUB_OFFLINE=1`.
+`HF_HUB_OFFLINE=1`. Its first validation run hung in rollout with an NPU
+device task timeout (EE9999 `rtDeviceSynchronizeWithTimeout`, error 107020
+EventWait on devices 2/3 about 36 minutes in), after which the trainer
+retried the dead engine indefinitely until the run was manually terminated
+(raw exit 143 recorded, log preserved). The entry is unregistered while
+deferred as a suspected device/HCCL-level incompatibility; the wrapper and
+ID stay reserved for re-registration once root-caused.
 
 Test 30 ports GPU diffusion E2E ID 11 (the device-residency regressions
 `test_artifact_preview_dump.py` and `test_minimax_h3_meta_output.py`): NPU
@@ -431,8 +438,8 @@ follow-up instead of being skipped or relaxed. Entry 32 (layered LoRA
 collection, single rank) passed at `69d94f7`. Entry 31 needs the Boogu source
 assets pre-cached from HF (offline runs cannot fetch them) and is pending a
 networked precache. The Qwen3-Omni and Qwen3-TTS entries 27/29 and the
-manual-tier H3 sync / SD3.5 offline DPO runs are being validated in the same
-batch series. The full thirty-three-entry combined suite has not yet been
+manual-tier H3 sync (both TP=2 regressions) and SD3.5 offline DPO passed
+after their fixes. The full thirty-two-entry combined suite has not yet been
 validated in a single run.
 
 ## Add a New NPU Smoke Test

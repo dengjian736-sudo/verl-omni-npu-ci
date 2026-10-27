@@ -51,9 +51,12 @@ run_test 25 "Bagel PickScore LoRA FlowGRPO e2e (v0 trainer)" \
 run_test 26 "FlowGRPO synchronous separate trainer e2e (v0, HCCL ckpt)" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
     bash tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh
-run_test 27 "MiniCPM-o 4.5 Thinker GSPO LoRA e2e (collocated sync, V1)" \
-    env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
-    bash tests/special_e2e/run_gspo_minicpmo_thinker_lora_v1_npu.sh
+# ID 27 (MiniCPM-o GSPO LoRA) is intentionally not registered: its rollout
+# hangs with an NPU device task timeout (EE9999 rtDeviceSynchronizeWithTimeout,
+# error 107020 EventWait) and the trainer then retries a dead engine
+# indefinitely. Deferred as a suspected device/HCCL-level incompatibility;
+# the wrapper stays for re-registration once root-caused. See
+# docs/contributing/npu_smoke_tests.md validation status.
 run_test 29 "Qwen3-TTS Talker full-parameter GRPO e2e" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
     bash tests/special_e2e/run_qwen3_tts_grpo_npu.sh
