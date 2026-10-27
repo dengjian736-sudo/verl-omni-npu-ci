@@ -28,25 +28,15 @@ import torch.distributed
 from torch.distributed.device_mesh import init_device_mesh
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import MixedPrecision, ShardingStrategy
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device
 
 # Hub FA kernels don't fetch on the torch-2.13 CI stack (no flash-attn2 build; hf-mirror breaks flash-attn3).
 _ulysses_backends = ["native"]
 
 
-def get_device_name() -> str:
-    if torch.cuda.is_available():
-        return "cuda"
-    return "cpu"
-
-
-def get_torch_device():
-    return getattr(torch, get_device_name(), torch.cuda)
-
-
 def initialize_global_process_group(timeout_second: int = 36000):
-    backend = "hccl" if get_device_name() == "npu" else "nccl"
     torch.distributed.init_process_group(
-        backend,
+        get_nccl_backend(),
         timeout=timedelta(seconds=timeout_second),
         init_method=os.environ.get("DIST_INIT_METHOD", None),
     )

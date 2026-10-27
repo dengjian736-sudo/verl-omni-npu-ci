@@ -33,6 +33,7 @@ import ray
 import torch
 from omegaconf import DictConfig, OmegaConf
 from verl.protocol import DataProto
+from verl.utils.device import get_torch_device
 from verl.workers.rollout.llm_server import LLMServerManager
 
 from verl_omni.agent_loop.composite_agent_loop import CompositeAgentLoopManager
@@ -219,18 +220,11 @@ def init_config() -> DictConfig:
         yield config
 
 
-@pytest.mark.parametrize("agent_reward_loop", [False, True])
-def test_single_turn(init_config, agent_reward_loop: bool):
-    """Smoke-test CompositeAgentLoopWorker end-to-end on Qwen-Image."""
-    ray.init(
-        runtime_env={
-            "env_vars": {
-                "TOKENIZERS_PARALLELISM": "true",
-                "NCCL_DEBUG": "WARN",
-                "VLLM_LOGGING_LEVEL": "INFO",
-            }
-        }
-    )
+def run_composite_single_turn(init_config, agent_reward_loop: bool):
+    """Run the shared GPU/NPU composite single-turn assertions.
+
+    The caller initializes Ray; this function shuts it down.
+    """
     try:
         dit_reward_handle = _FakeRewardLoopWorkerHandle()
         llm_server_manager = LLMServerManager.create(config=init_config)
@@ -386,5 +380,19 @@ def test_single_turn(init_config, agent_reward_loop: bool):
     finally:
         ray.shutdown()
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        get_torch_device().empty_cache()
+
+
+@pytest.mark.parametrize("agent_reward_loop", [False, True])
+def test_single_turn(init_config, agent_reward_loop: bool):
+    """Smoke-test CompositeAgentLoopWorker end-to-end on Qwen-Image."""
+    ray.init(
+        runtime_env={
+            "env_vars": {
+                "TOKENIZERS_PARALLELISM": "true",
+                "NCCL_DEBUG": "WARN",
+                "VLLM_LOGGING_LEVEL": "INFO",
+            }
+        }
+    )
+    run_composite_single_turn(init_config, agent_reward_loop)

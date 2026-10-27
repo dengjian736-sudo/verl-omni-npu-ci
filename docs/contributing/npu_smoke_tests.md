@@ -30,12 +30,17 @@ into these runners:
 | 11 | core | Standalone vLLM reward engine and OCR scoring | tests/special_e2e/run_reward_engine_npu.sh | 8 |
 | 12 | core | Rollout request batching and step-execution contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 8 |
 | 13 | core | Diffusers FSDP/FSDP2 engine with sequence parallel 2 | tests/workers/test_diffusers_fsdp_engine_sp_npu.py | 8 |
+| 14 | core | Diffusers Ulysses SP equivalence (torchrun) | tests/workers/test_diffusers_ulysses.py | 8 |
+| 15 | core | Trainable FSDP2 snapshot restore (two-rank) | tests/workers/test_trainable_snapshot_gpu.py | 8 |
+| 16 | core | Composite agent loop AR+DiT single turn | tests/agent_loop/test_composite_agent_loop_npu.py | 8 |
+| 17 | core | OmniAgentLoopWorker image_gen tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 8 |
 
-The combined runner has fourteen entries: eight core (0, 3, 4, 5, 6, 11, 12,
-13) and six e2e (1, 2, 7, 8, 9, 10). Entry 4 is parametrized with two pytest
-cases (`request_execution` and `step_execution`), entry 11 runs four pytest
-cases, entry 12 runs five, and entry 13 runs two, so the core group runs
-seventeen pytest cases in total.
+The combined runner has eighteen entries: twelve core (0, 3, 4, 5, 6, 11, 12,
+13, 14, 15, 16, 17) and six e2e (1, 2, 7, 8, 9, 10). Entry 4 is parametrized
+with two pytest cases (`request_execution` and `step_execution`), entry 11
+runs four pytest cases, entry 12 runs five, entry 13 runs two, entry 14 runs
+ten on eight devices, and entry 16 runs two (with and without the agent reward
+loop), so the core group runs thirty-one pytest cases in total.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -172,11 +177,54 @@ norm). The actor uses Diffusers `native` SDPA because the NPU-specific
 context-parallel attention backend does not implement backward in the pinned
 stack. Numerical parity with the GPU run is not established.
 
+Test 14 runs the shared GPU file `tests/workers/test_diffusers_ulysses.py`
+(GPU core ID 8a) unmodified in body: device detection and the distributed
+backend now come from `verl.utils.device` (`get_device_name` /
+`get_torch_device` / `get_nccl_backend`), which keeps GPU behavior identical
+and selects `hccl` plus `torch.npu` on Ascend. Under `torchrun` with eight
+NPUs all ten parametrized cases execute (SP=2 and SP=4 forward, forward +
+backward, MiniMax-H3 aligned/unaligned all-task, and FSDP-wrapped SP
+equivalence); the GPU two-device runner self-skips the five SP=4 cases.
+Equivalence tolerances are the GPU originals — this is same-device SP-vs-
+non-SP equivalence, not cross-device numerical parity.
+
+Test 15 runs the shared GPU file `tests/workers/test_trainable_snapshot_gpu.py`
+(GPU core ID 8b) unmodified in body: seeding, synchronization, device selection
+and the distributed backend now come from `verl.utils.device`, which keeps GPU
+behavior identical and selects `hccl` plus `torch.npu` on Ascend. The pytest
+entry spawns its own two-rank `torch.distributed.run` subprocess over the first
+two visible devices and checks per-rank JSON verdicts: trainable-only vs full
+snapshot bit-equality across save/restore/train cycles, CPU-offload policy
+handling, and rejection of injected rank-local save/restore/layout/clone
+failures on every rank. `REQUIRE_TRAINABLE_SNAPSHOT_GPU=1` turns a missing
+two-device environment into a failure instead of a skip. All nonzero exits,
+including native abort 134, remain failures for entries 12-15.
+
 ```bash
 DEVICE_NAME=npu NUM_NPUS=8 pytest -s tests/workers/test_diffusers_fsdp_engine_sp_npu.py
 DEVICE_NAME=npu NUM_NPUS=8 python3 -m pytest -s \
     tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py
+ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 torchrun --nproc_per_node=8 \
+    --local-ranks-filter=0 tests/workers/test_diffusers_ulysses.py
+REQUIRE_TRAINABLE_SNAPSHOT_GPU=1 python3 -m pytest -s \
+    tests/workers/test_trainable_snapshot_gpu.py
 ```
+
+### Composite and tool agent loops
+
+Test 16 ports `tests/agent_loop/test_composite_agent_loop.py` (GPU core ID 6,
+both `agent_reward_loop` modes) and Test 17 ports
+`tests/agent_loop/test_omni_agent_loop_worker_gpu.py` (GPU core ID 7). Both
+GPU modules expose their assertion bodies as `run_*` functions that the NPU
+tests call directly, so the AR+DiT batch shapes, trajectory and media-artifact
+keys, fake-reward score-split contract (`reward/ar` 1.0 vs combined 1.5), turn
+counts, tool-loop rollout stamps, agentic metrics and trajectory dumps are
+asserted identically. The NPU fixtures own the Ray cluster, device visibility
+and attention backends (`_native_npu` actor + `TORCH_SDPA` rollout for the
+Qwen-Image composite; thinker-only Qwen3-Omni with head dim 128, eager mode
+and `weight_nz_mode=0` for the tool loop). Test 17 reuses the GPU fake
+diffusion HTTP tool server and the `vllm_omni` rollout registration hook
+unchanged.
 
 ### MiniMax-H3 and Qwen3-Omni model smoke
 
@@ -255,8 +303,10 @@ codes 0; no teardown-abort classification was used); entry 11 covered only
 the GenRM case there, and its three additional reward cases are new on this
 branch. Entries 7-10 passed together with entries 0-3 as a separate
 eight-entry suite on the same class of server from the model-smoke branch.
-Entries 12 and 13 are new on this branch. The full fourteen-entry combined
-suite has not yet been validated in a single run.
+Entries 12-17 are new on this branch. Entry 12 passed standalone on an 8x
+Ascend 910B2 server at `97ed9b2` (5 passed, raw exit 0). Entries 13-17 are
+pending hardware validation, and the full eighteen-entry combined suite has
+not yet been validated in a single run.
 
 ## Add a New NPU Smoke Test
 
