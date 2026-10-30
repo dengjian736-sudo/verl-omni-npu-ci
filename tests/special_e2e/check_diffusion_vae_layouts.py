@@ -27,6 +27,7 @@ import traceback
 from pathlib import Path
 
 import torch
+from verl.utils.device import get_device_name, get_torch_device
 
 from verl_omni.pipelines.diffusion_rollout_output import quantize_pixels
 from verl_omni.pipelines.rollout_media import MediaArtifact, MediaSpec
@@ -146,7 +147,7 @@ def probe(case, checkpoint, device):
         "canonical_layout": artifact.spec.layout,
         "canonical_shape": list(artifact.data.shape),
         "sample_rate": sample_rate,
-        "peak_allocated_bytes": torch.cuda.max_memory_allocated(),
+        "peak_allocated_bytes": get_torch_device().max_memory_allocated(),
     }
 
 
@@ -157,19 +158,20 @@ def main():
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     cases = json.loads(Path(args.models_json).read_text())
-    torch.cuda.set_device(0)
-    torch.cuda.set_per_process_memory_fraction(0.35)
-    device = torch.device("cuda", 0)
+    torch_dev = get_torch_device()
+    torch_dev.set_device(0)
+    torch_dev.set_per_process_memory_fraction(0.35)
+    device = torch.device(get_device_name(), 0)
     results = {}
     for case, checkpoint in cases.items():
-        torch.cuda.reset_peak_memory_stats()
+        torch_dev.reset_peak_memory_stats()
         try:
             results[case] = {"status": "passed", **probe(case, checkpoint, device)}
         except Exception as error:
             traceback.print_exc()
             results[case] = {"status": "failed", "checkpoint": checkpoint, "error": str(error)}
         gc.collect()
-        torch.cuda.empty_cache()
+        torch_dev.empty_cache()
         Path(args.output).write_text(json.dumps(results, indent=2) + "\n")
         print(case, results[case], flush=True)
     raise SystemExit(any(result["status"] != "passed" for result in results.values()))

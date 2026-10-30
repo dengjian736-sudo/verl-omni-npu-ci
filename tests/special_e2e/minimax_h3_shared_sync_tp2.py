@@ -25,6 +25,7 @@ from pathlib import Path
 
 import torch
 from diffusers import MiniMaxH3Transformer3DModel
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device
 from vllm.config import VllmConfig, set_current_vllm_config
 from vllm.distributed import (
     destroy_distributed_environment,
@@ -111,10 +112,12 @@ def main():
     )
     args = parser.parse_args()
     rank, local_rank, tp = (int(os.environ[key]) for key in ("RANK", "LOCAL_RANK", "WORLD_SIZE"))
-    torch.cuda.set_device(local_rank)
-    device = torch.device("cuda", local_rank)
+    get_torch_device().set_device(local_rank)
+    device = torch.device(get_device_name(), local_rank)
     with set_current_vllm_config(VllmConfig()):
-        init_distributed_environment(local_rank=local_rank)
+        # vLLM defaults to the nccl backend; resolve the platform backend so
+        # the process group binds the npu device (hccl) on Ascend.
+        init_distributed_environment(local_rank=local_rank, backend=get_nccl_backend())
         initialize_model_parallel(tensor_model_parallel_size=tp)
         try:
             VLLMOmniHijack.hijack()
@@ -122,7 +125,10 @@ def main():
             actor = MiniMaxH3Transformer3DModel(**_TINY_H3)
             original = {name: value.detach().clone() for name, value in actor.named_parameters()}
             config = OmniDiffusionConfig(
-                model="tiny-h3-shared-sync",
+                # Offline stacks set H3_SYNC_MODEL_STUB to any existing local
+                # directory so vLLM's repo resolution skips snapshot_download;
+                # weights are built in memory and never loaded from this path.
+                model=os.environ.get("H3_SYNC_MODEL_STUB", "tiny-h3-shared-sync"),
                 tf_model_config=_vllm_transformer_config(),
                 dtype=torch.bfloat16,
                 parallel_config=DiffusionParallelConfig(tensor_parallel_size=tp),

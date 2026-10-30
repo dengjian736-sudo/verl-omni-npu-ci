@@ -88,10 +88,12 @@ cleanup_runtime() {
     ray stop --force || true
     pkill -TERM -f DiffusionWorker || true
     pkill -TERM -f VLLMWorker || true
+    pkill -TERM -f 'VLLM::' || true
     pkill -TERM -f vLLMOmniHttpServer || true
     sleep 5
     pkill -KILL -f DiffusionWorker || true
     pkill -KILL -f VLLMWorker || true
+    pkill -KILL -f 'VLLM::' || true
     pkill -KILL -f vLLMOmniHttpServer || true
     npu-smi info || true
 }

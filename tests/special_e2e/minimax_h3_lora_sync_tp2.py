@@ -21,6 +21,7 @@ import torch.nn as nn
 from diffusers import MiniMaxH3Transformer3DModel
 from peft import LoraConfig
 from peft.utils.save_and_load import get_peft_model_state_dict
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device
 from vllm.config import VllmConfig, set_current_vllm_config
 from vllm.distributed import (
     destroy_distributed_environment,
@@ -142,15 +143,20 @@ def main() -> None:
     rank = int(os.environ["RANK"])
     local_rank = int(os.environ["LOCAL_RANK"])
     tp_size = int(os.environ["WORLD_SIZE"])
-    torch.cuda.set_device(local_rank)
+    get_torch_device().set_device(local_rank)
 
     with set_current_vllm_config(VllmConfig()):
-        init_distributed_environment(local_rank=local_rank)
+        # vLLM defaults to the nccl backend; resolve the platform backend so
+        # the process group binds the npu device (hccl) on Ascend.
+        init_distributed_environment(local_rank=local_rank, backend=get_nccl_backend())
         initialize_model_parallel(tensor_model_parallel_size=tp_size)
         try:
-            device = torch.device(f"cuda:{local_rank}")
+            device = torch.device(get_device_name(), local_rank)
             od_config = OmniDiffusionConfig(
-                model="tiny-minimax-h3-lora-regression",
+                # Offline stacks set H3_SYNC_MODEL_STUB to any existing local
+                # directory so vLLM's repo resolution skips snapshot_download;
+                # weights are built in memory and never loaded from this path.
+                model=os.environ.get("H3_SYNC_MODEL_STUB", "tiny-minimax-h3-lora-regression"),
                 tf_model_config=_vllm_transformer_config(),
                 dtype=torch.float32,
                 parallel_config=DiffusionParallelConfig(tensor_parallel_size=tp_size),

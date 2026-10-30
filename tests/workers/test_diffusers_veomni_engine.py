@@ -29,6 +29,7 @@ import torch
 from verl import DataProto
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
 from verl.utils import tensordict_utils as tu
+from verl.utils.device import get_torch_device
 from verl.workers.config import TrainingWorkerConfig
 
 from verl_omni.pipelines.utils import build_scheduler
@@ -146,7 +147,7 @@ def create_data_samples(num_device: int, model_config: DiffusionModelConfig) -> 
 def test_diffusers_veomni_engine():
     ray.init()
     try:
-        visible_gpus = torch.cuda.device_count()
+        visible_gpus = get_torch_device().device_count()
         device_count = resolve_requested_num_gpus(default_num_gpus=max(1, visible_gpus))
         if device_count > 1 and device_count % 2 != 0:
             pytest.skip(f"Need even GPU count for fsdp_size=device_count test, got {device_count}")

@@ -23,12 +23,30 @@ into these runners:
 | 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 8 |
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
-| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 8 |
+| 11 | core | Reward restart determinism and JPEG rule scoring | tests/reward_loop/test_reward_engine_npu.py, remaining three cases | 8 |
+| 12 | core | Rollout request batching and step contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 8 |
+| 13 | core | FSDP/FSDP2 with sequence parallel 2 | tests/workers/test_diffusers_fsdp_engine_sp_npu.py | 8 |
+| 14 | core | Ulysses SP forward/backward equivalence | tests/workers/test_diffusers_ulysses.py via torchrun | 8 |
+| 15 | core | Two-rank trainable FSDP2 snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 2 |
+| 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 8 |
+| 18 | e2e | Qwen-Image FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_v1_npu.sh | 8 |
+| 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 8 |
+| 20 | e2e | Qwen-Image online DPO V1 sync | tests/special_e2e/run_online_dpo_qwen_image_npu.sh | 8 |
+| 21 | e2e | DiffusionNFT V1 sync | tests/special_e2e/run_diffusionnft_qwen_image_npu.sh | 8 |
+| 22 | e2e | FlowGRPO V1 separate-async | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 8 |
+| 23 | e2e | OPD sync colocated teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=sync | 8 |
+| 24 | e2e | OPD separate-async standalone teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=async | 8 |
+| 25 | e2e | Bagel PickScore LoRA FlowGRPO | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 8 |
+| 26 | e2e | FlowGRPO synchronous separate trainer (v0) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
+| 28 | core | FSDP2 LoRA adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py, fsdp2 parameters | 8 |
+| 30 | e2e | Image previews and H3 device-residency contracts | tests/trainer/diffusion/test_artifact_preview_dump_npu.py and tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
+| 34 | e2e | MiniMax-H3 T2VA FlowGRPO | tests/special_e2e/run_flowgrpo_minimax_h3_npu.sh | 8 |
 
-The combined runner has eight entries: six core (0, 3, 4, 5, 6, 7) and two e2e
-(1, 2). The core group collects seven pytest cases because entry 4 is
-parametrized into request and step execution. The two e2e entries each run a
-trainer workload; they are not pytest cases.
+The combined runner has 26 entries: 13 core and 13 e2e. Entry counts differ
+from pytest case counts and do not imply complete GPU coverage. ID 7 keeps its
+existing reward meaning; H3 uses ID 34. Each selected group still runs in its
+own eight-NPU workflow job.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -91,7 +109,34 @@ After configuring the [runtime environment](#runtime-environment), run:
 NUM_NPUS=8 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py
 ```
 
+Entry 11 adds restart determinism with one TP=2 or two TP=1 reward replicas,
+plus JPEG rule scoring without a reward server. Determinism requires exact
+score and response equality across two fresh Ray runs. Its tiny fixture uses
+56x56 images and a shorter context than the GPU case.
+
 All nonzero exits, including native abort 134, fail the smoke group.
+
+### Additional migrated cases and limits
+
+Entries 12-15 and 17 reuse the GPU assertions for batching/step trajectories,
+FSDP/SP, Ulysses equivalence, snapshot restoration, and tool execution.
+Entry 28 runs the two FSDP2 scenarios; its two FSDP1 scenarios are explicitly
+deselected because nested LoRA keys are missing on the pinned stack.
+
+Entries 18-26 preserve the GPU trainer paths and update counts; H3 retains
+actor SP=2 and rollout TP=2. Entries 18 and 20 use tiny Qwen2.5-VL rewards
+instead of GPU Qwen3-VL. The NVIDIA process-placement monitor in the GPU
+launchers reused by entries 18 and 25 has no validated NPU equivalent, so
+these do not establish that placement contract. Entry 30 checks preview export and tensor residency.
+
+Composite entry 16 and Qwen3-Omni entries 8-10 remain outside the group runners
+pending functional RNG, position-layout, or partial-wake investigations.
+MiniCPM-o 27, Boogu 31, and VeOmni 33 remain blocked. TTS 29 and LoRA
+collection 32 have manual entry points, but need packages/assets absent from
+the current NPU image preparation. None of these deferred scenarios counts
+as a passing group entry. Runtime validation must use this branch without
+local functional-source patches; earlier patched-branch passes are not evidence
+for this baseline.
 
 ### Wan2.2 trainer with a reward model
 
@@ -255,7 +300,7 @@ actions may otherwise be resolved against a different host workspace.
 ## Runtime Cleanup, Results, and Artifacts
 
 Before each test, the shared library stops Ray, terminates stale
-DiffusionWorker, VLLMWorker, and vLLMOmniHttpServer processes, waits five
+DiffusionWorker, VLLMWorker, VLLM::, and vLLMOmniHttpServer processes, waits five
 seconds, force-kills remaining matches, and prints npu-smi information.
 
 Per-test logs are stored under:
