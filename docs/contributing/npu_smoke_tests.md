@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/29/2026.
+Last updated: 10/30/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -115,6 +115,7 @@ score and response equality across two fresh Ray runs. Its tiny fixture uses
 56x56 images and a shorter context than the GPU case.
 
 All nonzero exits, including native abort 134, fail the smoke group.
+Failure to write a test log also fails the entry.
 
 ### Additional migrated cases and limits
 
@@ -161,6 +162,10 @@ Keep tests small and reproducible:
 - Preserve nonzero exit codes on failure.
 - Do not reuse Ray processes left by another test.
 
+The group runner isolates generic model/data overrides between model families;
+entries 1 and 2 generate separate datasets under the current log directory.
+Run an individual launcher to supply its model/data overrides explicitly.
+
 ### 2. Register the test in its group runner
 
 Add core tests to run_npu_smoke_core.sh and trainer tests to
@@ -193,7 +198,8 @@ only when all selected groups pass.
 
 If the new test lives outside current path filters, add its path. Current
 filters include verl_omni/**, tests/npu_smoke/**, tests/agent_loop/**,
-tests/reward_loop/**, tests/workers/**, tests/special_e2e/**, pyproject.toml,
+tests/reward_loop/**, tests/workers/**, tests/trainer/**, tests/pipelines/**,
+tests/utils/**, tests/special_e2e/**, pyproject.toml,
 .github/workflows/npu_smoke.yml,
 and .github/vllm_omni_pin.txt.
 
@@ -271,6 +277,13 @@ swr.cn-north-4.myhuaweicloud.com/mindspeed/pr-verl-omni-a2:v010-vllm030-omni030
 
 The workflow prints CANN details, npu-smi output, relevant Ascend variables,
 and installed vLLM component versions.
+
+The e2e job installs `qwen-vl-utils==0.0.14` without resolving dependencies for
+image-edit data loading. Install it before a local e2e run too:
+
+```bash
+python3 -m pip install --no-deps 'qwen-vl-utils==0.0.14'
+```
 
 The FlowGRPO and DanceGRPO end-to-end launchers source CANN and ATB before
 starting the workload:
