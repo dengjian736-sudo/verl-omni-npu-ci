@@ -112,6 +112,10 @@ class BooguImage(DiffusionModelBase):
             axes_lens=rope.axes_lens,
             patch_size=rope.patch_size,
         ).train(rope.training)
+        if get_device_name() == "npu":
+            from .normalization import install_empty_safe_rms_norm
+
+            install_empty_safe_rms_norm(module.ref_image_refiner)
         _make_config_checkpointable(module)
         return module
 

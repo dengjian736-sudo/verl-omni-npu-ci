@@ -17,6 +17,7 @@ including native teardown aborts, remain failures.
 | Packed multi-axis positions | Equal-length samples can be packed along the axes dimension; changing private ragged metadata does not repair the shape used for minibatch selection. | Rebuild the jagged tensor through the public API at train/infer worker boundaries, preserving token offsets and all integer positions. Reject inconsistent batches. |
 | Rollout wake-up | A weights-only wake resumes admission while KV cache remains asleep. | Resume generation only when the pinned engine reports that no sleeping tags remain. |
 | Boogu actor RoPE | Ascend rejects `torch.gather` on complex frequency tables. | Gather real/imaginary components at the original precision and reconstruct the complex view. A small local RoPE subclass inherits upstream position construction and serves both FlowGRPO and NFT adapters. |
+| Boogu empty reference tokens | NPU RMSNorm backward rejects the empty reference-token gradients used by T2I. | Locally adapt only reference-refiner norm leaves on NPU, preserving empty input/parameter gradients and native dtype rules; delegate nonempty inputs to the original implementation. |
 
 The shared worker changes contain no model-name dispatch. Boogu's canonical
 model class and installed dependencies are not patched in place. CPU regression
