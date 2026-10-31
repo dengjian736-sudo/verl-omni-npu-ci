@@ -25,6 +25,7 @@ from pathlib import Path
 
 import peft
 import torch
+from peft.utils.other import AuxiliaryTrainingWrapper
 from peft.utils.save_and_load import get_peft_model_state_dict
 from safetensors.torch import save_file
 from verl.utils.fsdp_utils import collect_lora_params as _upstream_collect_lora_params
@@ -378,6 +379,24 @@ def _peft_lora_params_to_cpu(peft_model, adapter_name: str) -> OrderedDict:
     # Nested FSDP leaf wrap: ``state_dict()`` can hit non-root FSDP hooks.
     # ``named_parameters()`` is the mapping verl's layered walker already uses.
     state_dict = {name: param for name, param in peft_model.named_parameters()}
+    for module_name, submodule in peft_model.named_modules():
+        for buffer_name, buffer in submodule.named_buffers(recurse=False):
+            if buffer_name not in submodule._non_persistent_buffers_set:
+                name = f"{module_name}.{buffer_name}" if module_name else buffer_name
+                state_dict[name] = buffer
+    # Auxiliary wrappers derive their local keys from state_dict(), which strips
+    # FSDP wrappers inside modules_to_save while tuner prefixes retain them.
+    for module_name, submodule in peft_model.named_modules():
+        if isinstance(submodule, AuxiliaryTrainingWrapper):
+            prefix = f"{module_name}." if module_name else ""
+            state_dict = {
+                (
+                    f"{prefix}{name[len(prefix) :].replace('_fsdp_wrapped_module.', '')}"
+                    if name.startswith(prefix)
+                    else name
+                ): tensor
+                for name, tensor in state_dict.items()
+            }
     lora_params = get_peft_model_state_dict(peft_model, state_dict=state_dict, adapter_name=adapter_name)
     return OrderedDict((name, _param_to_cpu(param)) for name, param in lora_params.items())
 
@@ -574,9 +593,9 @@ def collect_lora_params(
     # DIFF vs upstream (verl.utils.fsdp_utils.collect_lora_params): this wrapper
     # adds an explicit ``adapter_name`` (named policy adapters), the diffusers
     # layered walker with ``layer_prefixes``, and FSDP wrapper-token name
-    # cleaning. The upstream fast path survives only for the default adapter on
-    # non-diffusers-layered, non-FSDP2 modules; everything else flows through
-    # the adapter-aware implementation below.
+    # cleaning. Non-layered FSDP1 collection must use named_parameters for every
+    # adapter: FSDP state_dict strips nested wrapper tokens, while PEFT derives
+    # its tuner prefixes from named_modules and retains those tokens.
     # A single-rank FSDP1 actor uses NO_SHARD. The upstream layered
     # collector's fallback summons with offload_to_cpu=True, which PyTorch
     # rejects for NO_SHARD. Materialize on device and copy the adapter tensors
@@ -585,10 +604,9 @@ def collect_lora_params(
     from torch.distributed.fsdp import ShardingStrategy
 
     if (
-        layered_summon
-        and base_sync_done
+        base_sync_done
         and fsdp_version(module) == 1
-        and getattr(module, "sharding_strategy", None) == ShardingStrategy.NO_SHARD
+        and (not layered_summon or getattr(module, "sharding_strategy", None) == ShardingStrategy.NO_SHARD)
     ):
         peft_model = getattr(module, "_fsdp_wrapped_module", module)
         params = _collect_lora_params_non_layered(module, peft_model, adapter_name, base_sync_done=True)

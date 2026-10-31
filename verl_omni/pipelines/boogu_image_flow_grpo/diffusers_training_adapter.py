@@ -103,6 +103,15 @@ class BooguImage(DiffusionModelBase):
             subfolder="" if model_config.config_path else model_config.transformer_subfolder,
             torch_dtype=torch_dtype,
         )
+        from .rotary_embedding import BooguImagePortableRotaryPosEmbed
+
+        rope = module.rope_embedder
+        module.rope_embedder = BooguImagePortableRotaryPosEmbed(
+            theta=rope.theta,
+            axes_dim=rope.axes_dim,
+            axes_lens=rope.axes_lens,
+            patch_size=rope.patch_size,
+        ).train(rope.training)
         _make_config_checkpointable(module)
         return module
 

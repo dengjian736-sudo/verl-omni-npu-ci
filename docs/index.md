@@ -161,6 +161,7 @@ contributing/integrating_a_new_policy_gradient_algorithm_for_diffusion_model.md
 contributing/integrating_a_new_direct_preference_algorithm_for_diffusion_model.md
 contributing/gpu_smoke_tests.md
 contributing/npu_smoke_tests.md
+contributing/npu_complex_cases.md
 contributing/common_pitfalls.md
 ```
 

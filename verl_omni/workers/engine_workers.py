@@ -42,7 +42,6 @@ from verl.utils.memory_utils import aggressive_empty_cache
 from verl.utils.metric.utils import Metric
 from verl.utils.profiler import DistProfiler, DistProfilerExtension, ProfilerConfig, log_gpu_memory_usage
 from verl.utils.py_functional import append_to_dict
-from verl.utils.tensordict_utils import maybe_fix_3d_position_ids
 from verl.utils.torch_functional import allgather_dict_into_dict
 from verl.utils.tracking import RLInsightLogger
 from verl.workers.config import (
@@ -66,6 +65,7 @@ from verl_omni.utils.mfu import (
     allgather_diffusion_flops_meta,
     collect_diffusion_flops_meta,
 )
+from verl_omni.utils.position_ids import normalize_nested_position_ids
 from verl_omni.workers.config import (
     DiffusionActorConfig,
     DiffusionModelConfig,
@@ -331,7 +331,7 @@ class TrainingWorker(Worker, DistProfilerExtension):
         Returns:
 
         """
-        maybe_fix_3d_position_ids(data)
+        normalize_nested_position_ids(data)
         batch_size_per_dp = data.shape[0]
         disable_auto_offload = tu.pop(data, key="disable_auto_offload", default=False)
         mini_batch_size = tu.pop(data, key="mini_batch_size", default=None)
@@ -414,6 +414,7 @@ class TrainingWorker(Worker, DistProfilerExtension):
     @register(dispatch_mode=make_nd_compute_dataproto_dispatch_fn(mesh_name="train"), blocking=False)
     @DistProfiler.annotate(color="red", role="train_batch")
     def train_batch(self, data: TensorDict) -> TensorDict:
+        normalize_nested_position_ids(data)
         assert self.loss_fn is not None, "loss function can't be None when calling train_batch"
         assert not self.engine_config.forward_only, "Can't run `train_batch` when forward_only is in the engine config."
         # global_token_num should be a list of number of tokens of each seq in this batch
@@ -475,6 +476,7 @@ class TrainingWorker(Worker, DistProfilerExtension):
 
     @register(dispatch_mode=make_nd_compute_dataproto_dispatch_fn(mesh_name="train"), blocking=False)
     def infer_batch(self, data: TensorDict) -> TensorDict:
+        normalize_nested_position_ids(data)
         # add mfu calculator
         global_token_num = tu.get(data, key="global_token_num")
         compute_loss = tu.get(data, key="compute_loss", default=True)
