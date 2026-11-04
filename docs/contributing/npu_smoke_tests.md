@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/29/2026.
+Last updated: 11/02/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -14,21 +14,34 @@ into these runners:
 
 ## Test Cases
 
-| ID | Group | Name | Test entry point | Default NPUs |
+| ID | Group | Name | Test entry point | Default NPUs (serial / parallel) |
 |---|---|---|---|---:|
 | 0 | core | vLLM-Omni rollout + sleep/wake-up | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py | 8 |
 | 1 | e2e | Qwen-Image FlowGRPO trainer | tests/special_e2e/run_flowgrpo_qwen_image_npu.sh | 8 |
-| 2 | e2e | Wan2.2 DanceGRPO trainer with Qwen2.5-VL reward | tests/special_e2e/run_dancegrpo_wan22_npu.sh | 8 |
+| 2 | e2e | Wan2.2 DanceGRPO trainer with Qwen2.5-VL reward | tests/special_e2e/run_dancegrpo_wan22_npu.sh | 4 |
 | 3 | core | Diffusers FSDP engine inference and training | tests/workers/test_diffusers_fsdp_engine_npu.py | 8 |
-| 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 8 |
-| 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
-| 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
-| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 4 |
+| 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 4 |
+| 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 4 |
+| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 4 |
 
-The combined runner has eight entries: six core (0, 3, 4, 5, 6, 7) and two e2e
-(1, 2). The core group collects seven pytest cases because entry 4 is
-parametrized into request and step execution. The two e2e entries each run a
-trainer workload; they are not pytest cases.
+The combined runner has 8 entries: 6 core and 2 e2e. Entry counts differ
+from pytest case counts and do not imply complete GPU coverage. Each selected
+group runs in its own eight-NPU workflow job; a single budget value applies
+to both serial and parallel modes. Tests 0, 1, and 3 retain the
+full requested topology. Set `NPU_SMOKE_FULL_TOPOLOGY=1` to restore the requested budget for every entry.
+Entries run sequentially within each group and log their allocation and device IDs.
+Opt in with `NPU_SMOKE_PARALLEL=1` for two isolated four-NPU core lanes or
+disjoint e2e lanes (unused slots stay idle), after the group's exclusive eight-NPU entries finish.
+Serial and parallel modes require Linux child subreapers and pidfd signaling.
+Each supervised group or lane keeps the container's PID and mount namespaces,
+scopes cleanup to its own descendants, and uses separate short Ray and
+weight-transfer IPC directories.
+The workflow enables this mode; set `NPU_SMOKE_PARALLEL=0` for serial execution.
+Full topology mode remains serial. Parallel runtime visibility lists must be
+ascending; core 0 requires runtime device IDs 0–7. `ASCEND_VISIBLE_DEVICES`
+describes the container's physical allocation and is forwarded unchanged to
+each lane; it can contain more IDs than the lane's runtime mask.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -82,23 +95,25 @@ For a two-device local check, set both visibility variables to `0,1` and
 ### Standalone reward engine
 
 Test 7 checks standalone vLLM reward-server startup and OCR scoring with a tiny
-random Qwen2.5-VL model generated offline. Eight NPUs run four TP=2 reward
+random Qwen2.5-VL model generated offline. The default four-NPU entry runs two TP=2 reward
 replicas, without an actor rollout server. This is an execution smoke test.
 
 After configuring the [runtime environment](#runtime-environment), run:
 
 ```bash
-NUM_NPUS=8 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py
+NUM_NPUS=4 python3 -m pytest -v -s \
+    tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu
 ```
 
 All nonzero exits, including native abort 134, fail the smoke group.
+Failure to write a test log also fails the entry.
 
 ### Wan2.2 trainer with a reward model
 
-Test 2 runs one DanceGRPO training step with six actor NPUs and a dedicated
+Test 2 runs one DanceGRPO training step with two actor NPUs and a dedicated
 TP=2 Qwen2.5-VL reward engine on two NPUs. Prepare the Qwen2.5-VL-3B-Instruct
-checkpoint before an offline run; set `REWARD_MODEL_PATH` to its local directory
-when needed. The test must complete training and exit 0.
+checkpoint before an offline run; set `WAN22_REWARD_MODEL_PATH` to its local
+directory when needed. The test must complete training and exit 0.
 
 ## Add a New NPU Smoke Test
 
@@ -115,6 +130,11 @@ Keep tests small and reproducible:
 - Do not require public model or dataset downloads at runtime.
 - Preserve nonzero exit codes on failure.
 - Do not reuse Ray processes left by another test.
+
+The group runner isolates generic model/data overrides between model families
+and gives each trainer entry its own data directory under the current log
+directory. Run an individual launcher to supply its model/data overrides
+explicitly.
 
 ### 2. Register the test in its group runner
 
@@ -148,7 +168,7 @@ only when all selected groups pass.
 
 If the new test lives outside current path filters, add its path. Current
 filters include verl_omni/**, tests/npu_smoke/**, tests/agent_loop/**,
-tests/reward_loop/**, tests/workers/**, tests/special_e2e/**, pyproject.toml,
+tests/reward_loop/**, tests/workers/**, tests/utils/**, tests/special_e2e/**, pyproject.toml,
 .github/workflows/npu_smoke.yml,
 and .github/vllm_omni_pin.txt.
 
@@ -227,6 +247,10 @@ swr.cn-north-4.myhuaweicloud.com/mindspeed/pr-verl-omni-a2:v010-vllm030-omni030
 The workflow prints CANN details, npu-smi output, relevant Ascend variables,
 and installed vLLM component versions.
 
+Follow the [NPU installation guide](../start/install_npu.md) for environment
+setup and the [project extras](../start/install.md#extras) for optional runtime
+dependencies.
+
 The FlowGRPO and DanceGRPO end-to-end launchers source CANN and ATB before
 starting the workload:
 
@@ -254,9 +278,9 @@ actions may otherwise be resolved against a different host workspace.
 
 ## Runtime Cleanup, Results, and Artifacts
 
-Before each test, the shared library stops Ray, terminates stale
-DiffusionWorker, VLLMWorker, and vLLMOmniHttpServer processes, waits five
-seconds, force-kills remaining matches, and prints npu-smi information.
+Before each test and at group exit, both modes clean only verified descendants
+of their own supervisor. Unrelated Ray or vLLM services are left running.
+Cleanup or log-writing failure fails the group.
 
 Per-test logs are stored under:
 

@@ -11,6 +11,7 @@ on:
       - "tests/agent_loop/**"
       - "tests/reward_loop/**"
       - "tests/workers/**"
+      - "tests/utils/**"
       - "tests/special_e2e/**"
       - "pyproject.toml"
       - ".github/workflows/npu_smoke.yml"
@@ -26,6 +27,7 @@ on:
       - "tests/agent_loop/**"
       - "tests/reward_loop/**"
       - "tests/workers/**"
+      - "tests/utils/**"
       - "tests/special_e2e/**"
       - "pyproject.toml"
       - ".github/workflows/npu_smoke.yml"
@@ -101,6 +103,7 @@ jobs:
       HF_HUB_ENABLE_HF_TRANSFER: "0" # This is more stable
       PIP_INDEX_URL: "http://cache-service.nginx-pypi-cache.svc.cluster.local/pypi/simple"
       PIP_TRUSTED_HOST: "cache-service.nginx-pypi-cache.svc.cluster.local"
+      NPU_SMOKE_PARALLEL: "1"
       TRANSFORMERS_VERBOSITY: 'error'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
