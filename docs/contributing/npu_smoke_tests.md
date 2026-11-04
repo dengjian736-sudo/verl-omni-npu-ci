@@ -14,7 +14,7 @@ into these runners:
 
 ## Test Cases
 
-| ID | Group | Name | Test entry point | Default NPUs |
+| ID | Group | Name | Test entry point | Default NPUs (serial / parallel) |
 |---|---|---|---|---:|
 | 0 | core | vLLM-Omni rollout + sleep/wake-up | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py | 8 |
 | 1 | e2e | Qwen-Image FlowGRPO trainer | tests/special_e2e/run_flowgrpo_qwen_image_npu.sh | 8 |
@@ -26,15 +26,29 @@ into these runners:
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 4 |
 | 11 | core | Reward restart determinism and JPEG rule scoring (three pytest cases) | tests/reward_loop/test_reward_engine_npu.py | 4 |
 | 12 | core | Rollout request batching and step contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 4 |
+| 13 | core | FSDP/FSDP2 with sequence parallel 2 | tests/workers/test_diffusers_fsdp_engine_sp_npu.py | 8 |
+| 14 | core | Ulysses SP forward/backward equivalence | tests/workers/test_diffusers_ulysses.py via torchrun | 8 |
 | 15 | core | Two-rank trainable FSDP2 snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 8 / 4 |
 | 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 4 |
+| 18 | e2e | Qwen-Image FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_v1_npu.sh | 2 |
 | 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 2 |
+| 20 | e2e | Qwen-Image online DPO V1 sync | tests/special_e2e/run_online_dpo_qwen_image_npu.sh | 2 |
+| 21 | e2e | DiffusionNFT V1 sync | tests/special_e2e/run_diffusionnft_qwen_image_npu.sh | 2 |
+| 22 | e2e | FlowGRPO V1 separate-async | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 4 |
+| 23 | e2e | OPD sync colocated teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=sync | 2 |
+| 24 | e2e | OPD separate-async standalone teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=async | 4 |
+| 25 | e2e | Bagel PickScore LoRA FlowGRPO | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 2 |
+| 26 | e2e | FlowGRPO synchronous separate trainer (v0) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 4 |
+| 28 | core | FSDP2 LoRA adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py, fsdp2 parameters | 8 |
+| 30 | core | Image previews and H3 device-residency contracts | tests/trainer/diffusion/test_artifact_preview_dump_npu.py and tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 / 4 |
+| 34 | e2e | MiniMax-H3 T2VA FlowGRPO | tests/special_e2e/run_flowgrpo_minimax_h3_npu.sh | 2 |
 
-The runner has 13 entries: 10 core and 3 e2e. Entry counts differ from pytest case counts.
+The runner has 26 entries: 14 core and 12 e2e. Entry counts differ from pytest case counts.
 CI uses parallel lanes; set `NPU_SMOKE_PARALLEL=0` for serial or `NPU_SMOKE_FULL_TOPOLOGY=1` for full topology.
 
 Each workflow group uses eight NPUs; per-entry budgets apply in serial and parallel modes.
-Entries 0, 1, and 3 retain eight NPUs; entry 15 uses eight serially or four in a core lane.
+Entries 0, 1, 3, 13, 14, and 28 retain eight NPUs.
+Entries 15 and 30 use eight serially or four in a core lane.
 Parallel mode runs exclusive entries first, then disjoint 4/4 core or 2/2/4 e2e lanes; unused slots stay idle.
 Entries within one lane remain sequential. Full topology mode is serial.
 Both modes require Linux child subreapers and pidfd signaling and retain PID/mount namespaces.
@@ -163,7 +177,8 @@ only when all selected groups pass.
 
 If the new test lives outside current path filters, add its path. Current
 filters include verl_omni/**, tests/npu_smoke/**, tests/agent_loop/**,
-tests/reward_loop/**, tests/workers/**, tests/special_e2e/**, pyproject.toml,
+tests/reward_loop/**, tests/workers/**, tests/trainer/**, tests/pipelines/**,
+tests/utils/**, tests/special_e2e/**, pyproject.toml,
 .github/workflows/npu_smoke.yml,
 and .github/vllm_omni_pin.txt.
 
