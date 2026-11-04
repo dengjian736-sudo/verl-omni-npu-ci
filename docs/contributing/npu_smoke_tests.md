@@ -24,9 +24,12 @@ into these runners:
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 4 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 4 |
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 4 |
+| 11 | core | Reward restart determinism and JPEG rule scoring (three pytest cases) | tests/reward_loop/test_reward_engine_npu.py | 4 |
+| 12 | core | Rollout request batching and step contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 4 |
+| 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 4 |
 | 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 2 |
 
-The combined runner has 9 entries: 6 core and 3 e2e. Entry counts differ
+The combined runner has 12 entries: 9 core and 3 e2e. Entry counts differ
 from pytest case counts and do not imply complete GPU coverage. Each selected
 group runs in its own eight-NPU workflow job; a single budget value applies
 to both serial and parallel modes. Tests 0, 1, and 3 retain the
@@ -105,6 +108,10 @@ After configuring the [runtime environment](#runtime-environment), run:
 NUM_NPUS=4 python3 -m pytest -v -s \
     tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu
 ```
+
+Entry 7 selects the standalone startup case. Entry 11 selects the other three
+pytest cases: single-replica determinism, multi-replica determinism, and JPEG
+rule scoring.
 
 All nonzero exits, including native abort 134, fail the smoke group.
 Failure to write a test log also fails the entry.
