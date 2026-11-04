@@ -18,17 +18,16 @@ into these runners:
 |---|---|---|---|---:|
 | 0 | core | vLLM-Omni rollout + sleep/wake-up | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py | 8 |
 | 1 | e2e | Qwen-Image FlowGRPO trainer | tests/special_e2e/run_flowgrpo_qwen_image_npu.sh | 8 |
-| 2 | e2e | Wan2.2 DanceGRPO trainer with Qwen2.5-VL reward | tests/special_e2e/run_dancegrpo_wan22_npu.sh | 8 |
+| 2 | e2e | Wan2.2 DanceGRPO trainer with Qwen2.5-VL reward | tests/special_e2e/run_dancegrpo_wan22_npu.sh | 4 |
 | 3 | core | Diffusers FSDP engine inference and training | tests/workers/test_diffusers_fsdp_engine_npu.py | 8 |
-| 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 8 |
-| 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
-| 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
-| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 4 |
+| 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 4 |
+| 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 4 |
+| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 4 |
+| 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 2 |
 
-The combined runner has eight entries: six core (0, 3, 4, 5, 6, 7) and two e2e
-(1, 2). The core group collects seven pytest cases because entry 4 is
-parametrized into request and step execution. The two e2e entries each run a
-trainer workload; they are not pytest cases.
+The runner has 9 entries: 6 core and 3 e2e. Entry counts differ from pytest case counts.
+CI uses parallel lanes; set `NPU_SMOKE_PARALLEL=0` for serial or `NPU_SMOKE_FULL_TOPOLOGY=1` for full topology.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -82,22 +81,22 @@ For a two-device local check, set both visibility variables to `0,1` and
 ### Standalone reward engine
 
 Test 7 checks standalone vLLM reward-server startup and OCR scoring with a tiny
-random Qwen2.5-VL model generated offline. Eight NPUs run four TP=2 reward
+random Qwen2.5-VL model generated offline. Four NPUs run two TP=2 reward
 replicas, without an actor rollout server. This is an execution smoke test.
 
 After configuring the [runtime environment](#runtime-environment), run:
 
 ```bash
-NUM_NPUS=8 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py
+NUM_NPUS=4 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu
 ```
 
 All nonzero exits, including native abort 134, fail the smoke group.
 
 ### Wan2.2 trainer with a reward model
 
-Test 2 runs one DanceGRPO training step with six actor NPUs and a dedicated
+Test 2 runs one DanceGRPO training step with two actor NPUs and a dedicated
 TP=2 Qwen2.5-VL reward engine on two NPUs. Prepare the Qwen2.5-VL-3B-Instruct
-checkpoint before an offline run; set `REWARD_MODEL_PATH` to its local directory
+checkpoint before an offline run; set `WAN22_REWARD_MODEL_PATH` to its local directory
 when needed. The test must complete training and exit 0.
 
 ## Add a New NPU Smoke Test
@@ -254,9 +253,8 @@ actions may otherwise be resolved against a different host workspace.
 
 ## Runtime Cleanup, Results, and Artifacts
 
-Before each test, the shared library stops Ray, terminates stale
-DiffusionWorker, VLLMWorker, and vLLMOmniHttpServer processes, waits five
-seconds, force-kills remaining matches, and prints npu-smi information.
+Before each test and at exit, cleanup targets only verified supervisor descendants.
+Unrelated services survive; cleanup and log-writing errors fail the group.
 
 Per-test logs are stored under:
 

@@ -35,7 +35,7 @@ from run_npu_smoke_processes import DescendantScope, _read_state, enable_subreap
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LAYOUTS = {
     "core": (("exclusive", 8, (0, 3)), ("lane0", 4, (7,)), ("lane1", 4, (4, 5, 6))),
-    "e2e": (("exclusive", 8, (1,)), ("lane0", 2, ()), ("lane1", 2, ()), ("lane2", 4, (2,))),
+    "e2e": (("exclusive", 8, (1,)), ("lane0", 2, ()), ("lane1", 2, (19,)), ("lane2", 4, (2,))),
 }
 _SUMMARY_ROW = re.compile(r"^(\d+)\s+(PASS|FAIL)\s+(\d+s)\s+(.+)$")
 
@@ -450,3 +450,7 @@ def main() -> int:
     finally:
         if controller is not None:
             controller.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
