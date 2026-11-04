@@ -24,10 +24,26 @@ into these runners:
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 4 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 4 |
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 4 |
+| 11 | core | Reward restart determinism and JPEG rule scoring (three pytest cases) | tests/reward_loop/test_reward_engine_npu.py | 4 |
+| 12 | core | Rollout request batching and step contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 4 |
+| 15 | core | Two-rank trainable FSDP2 snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 8 / 4 |
+| 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 4 |
 | 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 2 |
 
-The runner has 9 entries: 6 core and 3 e2e. Entry counts differ from pytest case counts.
+The runner has 13 entries: 10 core and 3 e2e. Entry counts differ from pytest case counts.
 CI uses parallel lanes; set `NPU_SMOKE_PARALLEL=0` for serial or `NPU_SMOKE_FULL_TOPOLOGY=1` for full topology.
+
+Each workflow group uses eight NPUs; per-entry budgets apply in serial and parallel modes.
+Entries 0, 1, and 3 retain eight NPUs; entry 15 uses eight serially or four in a core lane.
+Parallel mode runs exclusive entries first, then disjoint 4/4 core or 2/2/4 e2e lanes; unused slots stay idle.
+Entries within one lane remain sequential. Full topology mode is serial.
+Both modes require Linux child subreapers and pidfd signaling and retain PID/mount namespaces.
+Each supervised group or lane uses separate short Ray and weight-transfer IPC directories.
+`ASCEND_RT_VISIBLE_DEVICES` must be ascending in parallel mode; core 0 requires runtime IDs 0–7.
+`ASCEND_VISIBLE_DEVICES` is the entire container physical allocation, preserved unchanged in all lanes;
+it may contain more IDs than the runtime mask.
+Group runners isolate model/data overrides between model families and give each trainer a separate data directory.
+Use individual launchers to supply model/data overrides explicitly.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
