@@ -15,5 +15,9 @@ run_test 2 "DanceGRPO Wan2.2 trainer e2e" --max-npus 4 \
     env -u MODEL_PATH -u TOKENIZER_PATH -u TRAIN_FILES -u VAL_FILES \
         DATA_DIR="${LOG_DIR}/test2_data" \
     bash tests/special_e2e/run_dancegrpo_wan22_npu.sh
+run_test 19 "Qwen-Image-Edit FlowGRPO V1 sync trainer e2e" --max-npus 2 \
+    env -u MODEL_PATH -u TOKENIZER_PATH -u TRAIN_FILES -u VAL_FILES \
+        DATA_DIR="${LOG_DIR}/test19_data" \
+    bash tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh
 cleanup_runtime
 print_summary

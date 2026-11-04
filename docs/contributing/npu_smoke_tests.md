@@ -24,8 +24,9 @@ into these runners:
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 4 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 4 |
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 4 |
+| 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 2 |
 
-The combined runner has 8 entries: 6 core and 2 e2e. Entry counts differ
+The combined runner has 9 entries: 6 core and 3 e2e. Entry counts differ
 from pytest case counts and do not imply complete GPU coverage. Each selected
 group runs in its own eight-NPU workflow job; a single budget value applies
 to both serial and parallel modes. Tests 0, 1, and 3 retain the
