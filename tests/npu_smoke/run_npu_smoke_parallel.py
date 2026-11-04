@@ -35,7 +35,12 @@ from run_npu_smoke_processes import DescendantScope, _read_state, enable_subreap
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LAYOUTS = {
     "core": (("exclusive", 8, (0, 3, 13, 14, 28)), ("lane0", 4, (7, 11, 12)), ("lane1", 4, (4, 5, 6, 15, 17, 30))),
-    "e2e": (("exclusive", 8, (1,)), ("lane0", 2, ()), ("lane1", 2, (19,)), ("lane2", 4, (2,))),
+    "e2e": (
+        ("exclusive", 8, (1,)),
+        ("lane0", 2, (18, 20, 23)),
+        ("lane1", 2, (19, 21, 25, 34)),
+        ("lane2", 4, (2, 22, 24, 26)),
+    ),
 }
 _SUMMARY_ROW = re.compile(r"^(\d+)\s+(PASS|FAIL)\s+(\d+s)\s+(.+)$")
 

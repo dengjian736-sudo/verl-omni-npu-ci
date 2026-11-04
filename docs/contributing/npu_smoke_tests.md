@@ -30,11 +30,20 @@ into these runners:
 | 14 | core | Ulysses SP forward/backward equivalence | tests/workers/test_diffusers_ulysses.py via torchrun | 8 |
 | 15 | core | Two-rank trainable FSDP2 snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 8 / 4 |
 | 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 4 |
+| 18 | e2e | Qwen-Image FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_v1_npu.sh | 2 |
 | 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 2 |
+| 20 | e2e | Qwen-Image online DPO V1 sync | tests/special_e2e/run_online_dpo_qwen_image_npu.sh | 2 |
+| 21 | e2e | DiffusionNFT V1 sync | tests/special_e2e/run_diffusionnft_qwen_image_npu.sh | 2 |
+| 22 | e2e | FlowGRPO V1 separate-async | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 4 |
+| 23 | e2e | OPD sync colocated teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=sync | 2 |
+| 24 | e2e | OPD separate-async standalone teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=async | 4 |
+| 25 | e2e | Bagel PickScore LoRA FlowGRPO | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 2 |
+| 26 | e2e | FlowGRPO synchronous separate trainer (v0) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 4 |
 | 28 | core | FSDP2 LoRA adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py, fsdp2 parameters | 8 |
 | 30 | core | Image previews and H3 device-residency contracts | tests/trainer/diffusion/test_artifact_preview_dump_npu.py and tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 / 4 |
+| 34 | e2e | MiniMax-H3 T2VA FlowGRPO | tests/special_e2e/run_flowgrpo_minimax_h3_npu.sh | 2 |
 
-The combined runner has 17 entries: 14 core and 3 e2e. Entry counts differ
+The combined runner has 26 entries: 14 core and 12 e2e. Entry counts differ
 from pytest case counts and do not imply complete GPU coverage. Each selected
 group runs in its own eight-NPU workflow job; a single budget value applies
 to both serial and parallel modes. Tests 0, 1, 3, 13, 14, and 28 retain the
@@ -43,7 +52,7 @@ topology serially and four NPUs in a core parallel lane.
 Set `NPU_SMOKE_FULL_TOPOLOGY=1` to restore the requested budget for every entry.
 Entries run sequentially within each group and log their allocation and device IDs.
 Opt in with `NPU_SMOKE_PARALLEL=1` for two isolated four-NPU core lanes or
-disjoint e2e lanes (unused slots stay idle), after the group's exclusive eight-NPU entries finish.
+2/2/4-NPU e2e lanes, after the group's exclusive eight-NPU entries finish.
 Serial and parallel modes require Linux child subreapers and pidfd signaling.
 Each supervised group or lane keeps the container's PID and mount namespaces,
 scopes cleanup to its own descendants, and uses separate short Ray and
