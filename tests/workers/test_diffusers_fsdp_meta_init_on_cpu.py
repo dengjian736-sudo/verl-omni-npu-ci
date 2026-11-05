@@ -17,6 +17,7 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
 import torch
 from accelerate import init_empty_weights
 
@@ -162,3 +163,104 @@ def test_meta_rank_adapters_beyond_the_first_match_base_dtype_and_device():
     for name, param in module.named_parameters():
         assert param.dtype == torch.bfloat16, name
         assert param.device.type == "meta", name
+
+
+def test_real_h3_config_only_rank_matches_pretrained_precision(tmp_path):
+    from diffusers import MiniMaxH3Transformer3DModel
+
+    import verl_omni.pipelines.minimax_h3_flow_grpo.diffusers_training_adapter  # noqa: F401
+
+    checkpoint = tmp_path / "h3"
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(42)
+        MiniMaxH3Transformer3DModel(
+            in_channels=8,
+            audio_in_channels=8,
+            num_layers=1,
+            num_refiner_layers=1,
+            hidden_size=64,
+            num_attention_heads=2,
+            attention_head_dim=32,
+            ffn_dim=128,
+            text_dim=32,
+            freq_dim=64,
+            time_embed_hidden_dim=64,
+            time_embed_dim=32,
+            rope_freq_dim=4,
+        ).save_pretrained(checkpoint)
+
+    original_dtype = torch.get_default_dtype()
+    maps, orders, buffers = [], [], []
+    for context in (lambda: torch.device("cpu"), init_empty_weights):
+        engine = _make_engine(
+            config_path=str(checkpoint),
+            local_path=str(checkpoint),
+            architecture="MiniMaxH3Pipeline",
+            algorithm="flow_grpo",
+            attn_backend="native",
+            trust_remote_code=False,
+            lora_rank=8,
+            lora_alpha=16,
+            lora_init_weights="gaussian",
+            policy_state_adapters=["default"],
+            target_modules=["to_q", "to_k", "to_v", "to_out.0", "ff.net.0.proj", "ff.net.2"],
+            target_parameters=None,
+            exclude_modules=None,
+            lora_dtype=None,
+            lora_adapter_path=None,
+            lora={"merge": False},
+        )
+        engine.engine_config = SimpleNamespace(model_dtype="bfloat16", forward_only=False)
+        with patch.object(diffusers_impl, "get_init_weight_context_manager", return_value=context):
+            module = engine._build_module()
+        for name, param in module.named_parameters():
+            keep_fp32 = any(part in name.split(".") for part in module._keep_in_fp32_modules)
+            expected = torch.float32 if keep_fp32 else torch.bfloat16
+            assert param.dtype == expected, name
+        module = engine._build_lora_module(module)
+        parameters = dict(module.named_parameters())
+        assert any("lora_A.default" in name for name in parameters)
+        assert all(param.is_meta == (context is init_empty_weights) for param in parameters.values())
+        maps.append({name: (tuple(param.shape), param.dtype) for name, param in parameters.items()})
+        orders.append(list(parameters))
+        buffers.append({name: (tuple(value.shape), value.dtype) for name, value in module.named_buffers()})
+        assert dict(module.named_buffers())["rope.inv_freq"].dtype == torch.float32
+        assert torch.get_default_dtype() == original_dtype
+    assert maps[0] == maps[1]
+    assert orders[0] == orders[1]
+    assert buffers[0] == buffers[1]
+
+
+def test_config_only_cast_preserves_aliases_grad_and_computed_buffers():
+    class Module(torch.nn.Module):
+        _keep_in_fp32_modules = ["keep"]
+
+        def __init__(self):
+            super().__init__()
+            self.keep = torch.nn.Linear(2, 2, dtype=torch.float64)
+            self.keep.weight.requires_grad_(False)
+            self.keep.alias = self.keep.weight
+            self.not_keep = torch.nn.Linear(2, 2)
+            self.keep.register_buffer("saved", torch.ones(2, dtype=torch.float64))
+            self.keep.register_buffer("computed", torch.ones(2, dtype=torch.float64), persistent=False)
+            self.register_buffer("index", torch.ones(2, dtype=torch.int64))
+            self.register_buffer("computed_default", torch.ones(2), persistent=False)
+
+    original_dtype = torch.get_default_dtype()
+    with patch("diffusers.AutoModel.from_config", side_effect=lambda *args, **kwargs: Module()):
+        module = diffusers_impl._build_diffusers_module_from_config("unused", torch.bfloat16)
+    assert module.keep.weight is module.keep.alias
+    assert not module.keep.weight.requires_grad
+    assert module.keep.weight.dtype == module.keep.saved.dtype == torch.float32
+    assert module.not_keep.weight.dtype == module.computed_default.dtype == torch.bfloat16
+    assert module.keep.computed.dtype == torch.float64
+    assert module.index.dtype == torch.int64
+    assert torch.get_default_dtype() == original_dtype
+
+
+def test_config_only_constructor_restores_default_dtype_on_error():
+    original_dtype = torch.get_default_dtype()
+    with patch("diffusers.AutoModel.from_config", side_effect=RuntimeError("constructor failed")):
+        with pytest.raises(RuntimeError, match="constructor failed"):
+            diffusers_impl._build_diffusers_module_from_config("unused", torch.bfloat16)
+    assert torch.get_default_dtype() == original_dtype

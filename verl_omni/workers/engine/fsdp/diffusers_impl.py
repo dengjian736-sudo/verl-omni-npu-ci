@@ -80,6 +80,30 @@ logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 device_name = get_device_name()
 
 
+def _build_diffusers_module_from_config(
+    load_path, torch_dtype: torch.dtype, *, preserve_fp32_modules: bool = True, **load_kwargs
+) -> torch.nn.Module:
+    """Match pretrained construction and persistent-state dtypes without reading weights."""
+    from diffusers import AutoModel
+
+    original_dtype = torch.get_default_dtype()
+    try:
+        if torch_dtype != getattr(torch, "float8_e4m3fn", None):
+            torch.set_default_dtype(torch_dtype)
+        module = AutoModel.from_config(load_path, **load_kwargs)
+    finally:
+        torch.set_default_dtype(original_dtype)
+
+    keep = (getattr(module, "_keep_in_fp32_modules", None) or []) if preserve_fp32_modules else []
+    if not isinstance(keep, list):
+        keep = [keep]
+    for name, tensor in module.state_dict(keep_vars=True).items():
+        if isinstance(tensor, torch.Tensor) and tensor.is_floating_point():
+            dtype = torch.float32 if any(part in name.split(".") for part in keep) else torch_dtype
+            tensor.data = tensor.data.to(dtype=dtype)
+    return module
+
+
 def _cast_loaded_diffusers_module(
     module: torch.nn.Module,
     torch_dtype: torch.dtype,
@@ -306,7 +330,12 @@ class DiffusersFSDPEngine(LoRAAdapterMixin, BaseEngine, ABC):
             # but diffusers' from_pretrained still reads every checkpoint tensor
             # under init_empty_weights. from_config reads only the config JSON.
             if init_context is init_empty_weights:
-                module = AutoModel.from_config(load_path, **load_kwargs)
+                module = _build_diffusers_module_from_config(
+                    load_path,
+                    torch_dtype,
+                    preserve_fp32_modules=DiffusionModelBase.get_class(self.model_config).preserve_fp32_modules(),
+                    **load_kwargs,
+                )
             else:
                 module = AutoModel.from_pretrained(load_path, torch_dtype=torch_dtype, **load_kwargs)
             try:
