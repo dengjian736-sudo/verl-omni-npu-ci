@@ -26,11 +26,15 @@ into these runners:
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 8 |
 | 11 | core | Reward restart determinism and JPEG rule scoring (three pytest cases) | tests/reward_loop/test_reward_engine_npu.py | 8 |
 | 12 | core | Rollout request batching and step contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 8 |
+| 13 | core | FSDP/FSDP2 with sequence parallel 2 | tests/workers/test_diffusers_fsdp_engine_sp_npu.py | 8 |
+| 14 | core | Ulysses SP forward/backward equivalence | tests/workers/test_diffusers_ulysses.py via torchrun | 8 |
 | 15 | core | Two-rank trainable FSDP2 snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 8 |
 | 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 8 |
 | 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 8 |
+| 28 | core | FSDP2 LoRA adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py, fsdp2 parameters | 8 |
+| 30 | core | Image previews and H3 device-residency contracts | tests/trainer/diffusion/test_artifact_preview_dump_npu.py and tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
 
-The combined runner has 13 entries: 10 core and 3 e2e.
+The combined runner has 17 entries: 14 core and 3 e2e.
 Some entries collect several pytest cases; trainer entries run real workloads.
 Each CI group reserves eight NPUs and runs its entries sequentially.
 
@@ -110,6 +114,8 @@ Image-edit entry 19 reuses the GPU FlowGRPO workload with local checkpoints,
 native NPU attention, a real training step and preserved nonzero exits.
 Entries 11, 12, 15 and 17 cover reward restarts/rules, rollout contracts,
 snapshot restoration and the image-generation tool agent.
+Entries 13, 14, 28 and 30 add SP/FSDP, Ulysses, FSDP2 adapter and preview
+contracts. The two pinned FSDP1 adapter exclusions remain explicit.
 For a targeted group run, set `NPU_SMOKE_TEST_IDS` to comma-separated IDs;
 unset or empty runs the entire group. Invalid, duplicate or unknown IDs fail.
 For example: `NPU_SMOKE_TEST_IDS=19 bash tests/npu_smoke/run_npu_smoke_e2e.sh --num-npus 8`.
@@ -163,7 +169,7 @@ only when all selected groups pass.
 
 If the new test lives outside current path filters, add its path. Current
 filters include verl_omni/**, tests/npu_smoke/**, tests/agent_loop/**,
-tests/reward_loop/**, tests/workers/**, tests/utils/**,
+tests/reward_loop/**, tests/workers/**, tests/utils/**, tests/trainer/**, tests/pipelines/**,
 tests/special_e2e/**, pyproject.toml,
 .github/workflows/npu_smoke.yml,
 and .github/vllm_omni_pin.txt.
