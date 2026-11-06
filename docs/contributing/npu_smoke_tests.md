@@ -30,11 +30,20 @@ into these runners:
 | 14 | core | Ulysses SP forward/backward equivalence | tests/workers/test_diffusers_ulysses.py via torchrun | 8 |
 | 15 | core | Two-rank trainable FSDP2 snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 8 |
 | 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 8 |
+| 18 | e2e | Qwen-Image FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_v1_npu.sh | 8 |
 | 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 8 |
+| 20 | e2e | Qwen-Image online DPO V1 sync | tests/special_e2e/run_online_dpo_qwen_image_npu.sh | 8 |
+| 21 | e2e | DiffusionNFT V1 sync | tests/special_e2e/run_diffusionnft_qwen_image_npu.sh | 8 |
+| 22 | e2e | FlowGRPO V1 separate-async | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 8 |
+| 23 | e2e | OPD sync colocated teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=sync | 8 |
+| 24 | e2e | OPD separate-async standalone teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=async | 8 |
+| 25 | e2e | Bagel PickScore LoRA FlowGRPO | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 8 |
+| 26 | e2e | FlowGRPO synchronous separate trainer (v0) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
 | 28 | core | FSDP2 LoRA adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py, fsdp2 parameters | 8 |
 | 30 | core | Image previews and H3 device-residency contracts | tests/trainer/diffusion/test_artifact_preview_dump_npu.py and tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
+| 34 | e2e | MiniMax-H3 T2VA FlowGRPO | tests/special_e2e/run_flowgrpo_minimax_h3_npu.sh | 8 |
 
-The combined runner has 17 entries: 14 core and 3 e2e.
+The combined runner has 26 entries: 14 core and 12 e2e.
 Some entries collect several pytest cases; trainer entries run real workloads.
 Each CI group reserves eight NPUs and runs its entries sequentially.
 
@@ -116,6 +125,8 @@ Entries 11, 12, 15 and 17 cover reward restarts/rules, rollout contracts,
 snapshot restoration and the image-generation tool agent.
 Entries 13, 14, 28 and 30 add SP/FSDP, Ulysses, FSDP2 adapter and preview
 contracts. The two pinned FSDP1 adapter exclusions remain explicit.
+Entries 18 and 20-26 add V1 sync/async, DPO, NFT, teachers, BAGEL and
+separate-training workloads; entry 34 covers MiniMax-H3 T2VA training.
 For a targeted group run, set `NPU_SMOKE_TEST_IDS` to comma-separated IDs;
 unset or empty runs the entire group. Invalid, duplicate or unknown IDs fail.
 For example: `NPU_SMOKE_TEST_IDS=19 bash tests/npu_smoke/run_npu_smoke_e2e.sh --num-npus 8`.
