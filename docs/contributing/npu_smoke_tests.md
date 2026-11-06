@@ -24,9 +24,13 @@ into these runners:
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 8 |
+| 11 | core | Reward restart determinism and JPEG rule scoring (three pytest cases) | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 12 | core | Rollout request batching and step contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 8 |
+| 15 | core | Two-rank trainable FSDP2 snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 8 |
+| 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 8 |
 | 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 8 |
 
-The combined runner has 9 entries: 6 core and 3 e2e.
+The combined runner has 13 entries: 10 core and 3 e2e.
 Some entries collect several pytest cases; trainer entries run real workloads.
 Each CI group reserves eight NPUs and runs its entries sequentially.
 
@@ -104,6 +108,8 @@ when needed. The test must complete training and exit 0.
 
 Image-edit entry 19 reuses the GPU FlowGRPO workload with local checkpoints,
 native NPU attention, a real training step and preserved nonzero exits.
+Entries 11, 12, 15 and 17 cover reward restarts/rules, rollout contracts,
+snapshot restoration and the image-generation tool agent.
 For a targeted group run, set `NPU_SMOKE_TEST_IDS` to comma-separated IDs;
 unset or empty runs the entire group. Invalid, duplicate or unknown IDs fail.
 For example: `NPU_SMOKE_TEST_IDS=19 bash tests/npu_smoke/run_npu_smoke_e2e.sh --num-npus 8`.
