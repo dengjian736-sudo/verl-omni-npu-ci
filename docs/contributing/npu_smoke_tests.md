@@ -14,7 +14,7 @@ into these runners:
 
 ## Test Cases
 
-| ID | Group | Name | Test entry point | Default NPUs |
+| ID | Group | Name | Test entry point | Group NPUs |
 |---|---|---|---|---:|
 | 0 | core | vLLM-Omni rollout + sleep/wake-up | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py | 8 |
 | 1 | e2e | Qwen-Image FlowGRPO trainer | tests/special_e2e/run_flowgrpo_qwen_image_npu.sh | 8 |
@@ -23,12 +23,12 @@ into these runners:
 | 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 8 |
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
-| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 8 |
+| 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 8 |
 
-The combined runner has eight entries: six core (0, 3, 4, 5, 6, 7) and two e2e
-(1, 2). The core group collects seven pytest cases because entry 4 is
-parametrized into request and step execution. The two e2e entries each run a
-trainer workload; they are not pytest cases.
+The combined runner has 9 entries: 6 core and 3 e2e.
+Some entries collect several pytest cases; trainer entries run real workloads.
+Each CI group reserves eight NPUs and runs its entries sequentially.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -100,6 +100,14 @@ TP=2 Qwen2.5-VL reward engine on two NPUs. Prepare the Qwen2.5-VL-3B-Instruct
 checkpoint before an offline run; set `REWARD_MODEL_PATH` to its local directory
 when needed. The test must complete training and exit 0.
 
+### Additional migrated cases
+
+Image-edit entry 19 reuses the GPU FlowGRPO workload with local checkpoints,
+native NPU attention, a real training step and preserved nonzero exits.
+For a targeted group run, set `NPU_SMOKE_TEST_IDS` to comma-separated IDs;
+unset or empty runs the entire group. Invalid, duplicate or unknown IDs fail.
+For example: `NPU_SMOKE_TEST_IDS=19 bash tests/npu_smoke/run_npu_smoke_e2e.sh --num-npus 8`.
+
 ## Add a New NPU Smoke Test
 
 ### 1. Add the smallest useful entry point
@@ -134,8 +142,9 @@ workflow mapping change.
 ### 3. Configure devices
 
 Group runners use eight NPUs by default and derive
-ASCEND_RT_VISIBLE_DEVICES from --num-npus. Each command should receive both
-ASCEND_RT_VISIBLE_DEVICES and NUM_NPUS. If a test requires a fixed number of
+ASCEND_RT_VISIBLE_DEVICES from --num-npus. Each command receives the selected
+NUM_NPUS without an automatic per-case NPU cap; CI uses eight devices per
+group. A test may intentionally use fewer ranks for a fixed-topology contract. If a test requires a fixed number of
 devices, validate it in the test entry point and fail with a clear message.
 
 ### 4. Update workflow groups and paths
@@ -148,7 +157,8 @@ only when all selected groups pass.
 
 If the new test lives outside current path filters, add its path. Current
 filters include verl_omni/**, tests/npu_smoke/**, tests/agent_loop/**,
-tests/reward_loop/**, tests/workers/**, tests/special_e2e/**, pyproject.toml,
+tests/reward_loop/**, tests/workers/**, tests/utils/**,
+tests/special_e2e/**, pyproject.toml,
 .github/workflows/npu_smoke.yml,
 and .github/vllm_omni_pin.txt.
 
@@ -254,34 +264,8 @@ actions may otherwise be resolved against a different host workspace.
 
 ## Runtime Cleanup, Results, and Artifacts
 
-### Process and IPC isolation foundations
-
-This part adds controller/supervisor modules; shell dispatch and parallel-lane
-activation follow separately. The existing group runners remain serial.
-
-`VERL_ZMQ_DIR` optionally replaces `/tmp` for colocated weight-transfer sockets.
-Use an existing absolute directory without symlink components, visible at the
-same path to sender and receiver; the final socket path must be under 108 bytes.
-Unset or empty keeps `/tmp`. The server appends this variable to
-`VLLM_RAY_EXTRA_ENV_VARS_TO_COPY`, preserving caller entries, so Ray stage
-workers use the same directory. Replica and rank naming stay unchanged.
-
-The foundation modules use these environment variables; they are not a new
-shell-runner interface in this part:
-
-| Variable | Meaning |
-|---|---|
-| `NUM_NPUS`, `ASCEND_RT_VISIBLE_DEVICES`, `ASCEND_VISIBLE_DEVICES` | Lane size, ordered runtime mask, and physical allocation; defaults derive from `--num-npus`. |
-| `NPU_SMOKE_TEST_IDS` | Distinct registered IDs, or all group IDs when unset/empty; shell filtering follows with activation. |
-| `NPU_SMOKE_FULL_TOPOLOGY` | Default `0`; `1` requires the controller's serial mode. |
-| `NPU_SMOKE_PARALLEL_CHILD` | Controller-generated `1`; rejects nested controllers. |
-| `NPU_SMOKE_FIXTURE_ROOT`, `NPU_SMOKE_MASTER_PORT_RANGE` | Generated per-lane fixture/port settings; workload consumers follow with activation. |
-| `LOG_DIR`, `TMPDIR`, `RAY_TMPDIR` | Per-lane logs and short private temporary directories; `VERL_ZMQ_DIR` uses the same private runtime. |
-| `NPU_SMOKE_CONTROLLER_PID`, `NPU_SMOKE_CONTROLLER_START` | Generated parent identity for supervisor checks; do not set manually. |
-| `NPU_SMOKE_SUPERVISOR_PID`, `NPU_SMOKE_SUPERVISOR_START`, `NPU_SMOKE_SUPERVISOR_STATE`, `NPU_SMOKE_SUPERVISOR_TOKEN` | Generated identity, private metadata path and authentication token; do not set manually. |
-| `RAY_EXPERIMENTAL_NOSET_*`, `RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO` | Partitioned lanes clear Ray's visibility-suppression flags and set the zero-resource override to `0`; exclusive/serial lanes preserve caller policy. |
-
-### Group results
+Run only one group runner per container: its cleanup may stop other Ray
+workloads in that container. Existing core/e2e CI jobs use separate containers.
 
 Before each test, the shared library stops Ray, terminates stale
 DiffusionWorker, VLLMWorker, and vLLMOmniHttpServer processes, waits five
@@ -290,7 +274,7 @@ seconds, force-kills remaining matches, and prints npu-smi information.
 Per-test logs are stored under:
 
 ```text
-logs/npu_smoke/<group>/<timestamp>/
+logs/npu_smoke/<group>/<timestamp>.<unique-suffix>/
 ```
 
 Each test writes test_<id>.log and each group writes summary.log. The workflow
