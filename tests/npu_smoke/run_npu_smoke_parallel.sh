@@ -10,7 +10,7 @@ if [[ "${NUM_NPUS}" != 8 || "${ASCEND_RT_VISIBLE_DEVICES}" != 0,1,2,3,4,5,6,7 ]]
     fail "Parallel smoke requires the complete physical device list 0,1,2,3,4,5,6,7 and --num-npus 8."
     exit 2
 fi
-for variable in MODEL_PATH TOKENIZER_PATH DATA_DIR TRAIN_FILES VAL_FILES; do
+for variable in MODEL_PATH TOKENIZER_PATH DATA_DIR TRAIN_FILES VAL_FILES NPU_SMOKE_TEST_IDS; do
     if [[ -n "${!variable:-}" ]]; then
         fail "Unset ${variable} before running multiple model workloads."
         exit 2
@@ -59,8 +59,8 @@ start_group() {
     names+=("${group}")
 }
 
-start_group core 0,1 2 10000,20000
-start_group e2e 2,3,4,5,6,7 6 26000,27000
+start_group core 0,1,2,3 4 10000,20000
+start_group e2e 4,5,6,7 4 26000,27000
 failed=0
 for i in "${!pids[@]}"; do
     rc=0

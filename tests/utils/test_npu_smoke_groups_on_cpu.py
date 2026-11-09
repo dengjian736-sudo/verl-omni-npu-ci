@@ -99,9 +99,9 @@ def test_parallel_groups_overlap_and_preserve_failures(shell_runtime, core_exit,
     )
     assert result.returncode == int(bool(core_exit or e2e_exit)), result.stdout + result.stderr
     values = {name: json.loads((evidence / f"{name}.json").read_text()) for name in ("core", "e2e")}
-    assert values["core"]["ASCEND_RT_VISIBLE_DEVICES"] == "0,1"
-    assert values["e2e"]["ASCEND_RT_VISIBLE_DEVICES"] == "2,3,4,5,6,7"
-    assert values["core"]["NUM_NPUS"] == "2" and values["e2e"]["NUM_NPUS"] == "6"
+    assert values["core"]["ASCEND_RT_VISIBLE_DEVICES"] == "0,1,2,3"
+    assert values["e2e"]["ASCEND_RT_VISIBLE_DEVICES"] == "4,5,6,7"
+    assert values["core"]["NUM_NPUS"] == "4" and values["e2e"]["NUM_NPUS"] == "4"
     assert values["core"]["RAY_TMPDIR"] != values["e2e"]["RAY_TMPDIR"]
     assert values["core"]["RAY_MASTER_PORT_RANGE"] != values["e2e"]["RAY_MASTER_PORT_RANGE"]
     for value in values.values():
@@ -115,7 +115,13 @@ def test_parallel_groups_overlap_and_preserve_failures(shell_runtime, core_exit,
 
 
 @pytest.mark.parametrize(
-    "overrides", [{"NUM_NPUS": "4"}, {"ASCEND_RT_VISIBLE_DEVICES": "0,1,2,3"}, {"MODEL_PATH": "/model"}]
+    "overrides",
+    [
+        {"NUM_NPUS": "4"},
+        {"ASCEND_RT_VISIBLE_DEVICES": "0,1,2,3"},
+        {"MODEL_PATH": "/model"},
+        {"NPU_SMOKE_TEST_IDS": "0"},
+    ],
 )
 def test_invalid_parallel_plan_fails_without_cleanup(shell_runtime, overrides):
     """Invalid allocation or shared model overrides cannot stop existing jobs."""
@@ -221,3 +227,38 @@ def test_trainer_launchers_preserve_device_policy_paths_and_exit(shell_runtime, 
     assert captured["noset"] == ("1" if value is None else value)
     assert f"actor_rollout_ref.model.path={env['MODEL_PATH']}" in captured["argv"]
     assert f"data.train_files={data}/train.parquet" in captured["argv"]
+
+
+@pytest.mark.parametrize("parallel", [False, True])
+def test_model_wrapper_runtime_arguments_keep_lane_isolation(shell_runtime, parallel):
+    """All delegated model launchers select local Ray and disjoint trainer ports."""
+    _, _, _, env = shell_runtime
+    bins = Path(env["PATH"].split(os.pathsep)[0])
+    python = bins / "python3"
+    python.write_text("#!/bin/sh\ncat >/dev/null\n")
+    python.chmod(0o755)
+    env.update(NUM_NPUS="6", ASCEND_RT_VISIBLE_DEVICES="2,3,4,5,6,7", ASCEND_VISIBLE_DEVICES="2,3,4,5,6,7")
+    if parallel:
+        env.update(
+            NPU_SMOKE_SKIP_GLOBAL_CLEANUP="1",
+            RAY_MASTER_PORT_RANGE="26000,27000",
+            RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES="",
+        )
+    command = 'source() { return 0; }; . "$1"; printf "%s\\n" "${NPU_RUNTIME_ARGS[@]}"'
+    result = subprocess.run(
+        ["bash", "-c", command, "fixture", str(REPO_ROOT / "tests/special_e2e/lib_npu_e2e.sh")],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    args = result.stdout.splitlines()
+    assert ("+ray_kwargs.ray_init.address=local" in args) == parallel
+    assert ("trainer.ray_master_port_range=[26000,27000]" in args) == parallel
+    expected = "" if parallel else "1"
+    assert (
+        f'++ray_kwargs.ray_init.runtime_env.env_vars.RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES="{expected}"'
+        in args
+    )
+    assert '++ray_kwargs.ray_init.runtime_env.env_vars.ASCEND_VISIBLE_DEVICES="2,3,4,5,6,7"' in args

@@ -14,7 +14,7 @@ into these runners:
 
 ## Test Cases
 
-| ID | Group | Name | Test entry point | Default NPUs |
+| ID | Group | Name | Test entry point | Group NPUs |
 |---|---|---|---|---:|
 | 0 | core | vLLM-Omni rollout + sleep/wake-up | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py | 8 |
 | 1 | e2e | Qwen-Image FlowGRPO trainer | tests/special_e2e/run_flowgrpo_qwen_image_npu.sh | 8 |
@@ -23,18 +23,37 @@ into these runners:
 | 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 8 |
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
-| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 8 |
+| 11 | core | Reward restart determinism and JPEG rule scoring (three pytest cases) | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 12 | core | Rollout request batching and step contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 8 |
+| 13 | core | FSDP/FSDP2 with sequence parallel 2 | tests/workers/test_diffusers_fsdp_engine_sp_npu.py | 8 |
+| 14 | core | Ulysses SP forward/backward equivalence | tests/workers/test_diffusers_ulysses.py via torchrun | 8 |
+| 15 | core | Two-rank trainable FSDP2 snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 8 |
+| 17 | core | Omni image-generation tool agent loop | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 8 |
+| 18 | e2e | Qwen-Image FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_v1_npu.sh | 8 |
+| 19 | e2e | Qwen-Image-Edit FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_edit_npu.sh | 8 |
+| 20 | e2e | Qwen-Image online DPO V1 sync | tests/special_e2e/run_online_dpo_qwen_image_npu.sh | 8 |
+| 21 | e2e | DiffusionNFT V1 sync | tests/special_e2e/run_diffusionnft_qwen_image_npu.sh | 8 |
+| 22 | e2e | FlowGRPO V1 separate-async | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 8 |
+| 23 | e2e | OPD sync colocated teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=sync | 8 |
+| 24 | e2e | OPD separate-async standalone teachers | tests/special_e2e/run_diffusion_teacher_smoke_npu.sh, SMOKE=async | 8 |
+| 25 | e2e | Bagel PickScore LoRA FlowGRPO | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 8 |
+| 26 | e2e | FlowGRPO synchronous separate trainer (v0) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
+| 28 | core | FSDP2 LoRA adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py, fsdp2 parameters | 8 |
+| 30 | core | Image previews and H3 device-residency contracts | tests/trainer/diffusion/test_artifact_preview_dump_npu.py and tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
+| 34 | e2e | MiniMax-H3 T2VA FlowGRPO | tests/special_e2e/run_flowgrpo_minimax_h3_npu.sh | 8 |
 
-The combined runner has eight entries: six core (0, 3, 4, 5, 6, 7) and two e2e
-(1, 2). The core group collects seven pytest cases because entry 4 is
-parametrized into request and step execution. The two e2e entries each run a
-trainer workload; they are not pytest cases.
+The combined runner has 26 entries: 14 core and 12 e2e.
+Some entries collect several pytest cases; trainer entries run real workloads.
+The default group budget is eight NPUs. The opt-in parallel experiment below
+assigns four NPUs to each group; entries within each group stay sequential.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
 inference/training exercise, with `_native_npu` attention and sequence parallel
 size 1. It requires at least two visible NPUs and a local tiny Qwen-Image model.
-FSDP2 and sequence-parallel execution are not covered by this NPU case.
+FSDP2 and sequence-parallel execution are covered separately by entries 13-15
+and 28.
 The test checks finite inference log probabilities, training loss, and gradient
 norm; it does not establish GPU/NPU numerical parity or model convergence.
 
@@ -88,7 +107,7 @@ replicas, without an actor rollout server. This is an execution smoke test.
 After configuring the [runtime environment](#runtime-environment), run:
 
 ```bash
-NUM_NPUS=8 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py
+NUM_NPUS=8 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu
 ```
 
 All nonzero exits, including native abort 134, fail the smoke group.
@@ -176,8 +195,9 @@ Run all groups:
 bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 8
 ```
 
-An opt-in single-host experiment runs core on NPUs `0,1` and e2e on
-`2,3,4,5,6,7` in the same dedicated CI container:
+An opt-in single-host experiment runs core on NPUs `0,1,2,3` and e2e on
+`4,5,6,7` in the same dedicated CI container. Four core devices retain the
+Ulysses SP=4 cases:
 
 ```bash
 NPU_SMOKE_PARALLEL=1 bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 8
@@ -190,8 +210,8 @@ trainer uses a master-port range outside the core default. Only e2e performs
 colocated weight transfers, and its trainers remain sequential, retaining the
 existing runtime IPC paths. No runtime source changes are required.
 
-Unset shared `MODEL_PATH`, `TOKENIZER_PATH`, `DATA_DIR`, `TRAIN_FILES` and
-`VAL_FILES` overrides before parallel execution. E2e datasets are isolated under
+Unset shared `MODEL_PATH`, `TOKENIZER_PATH`, `DATA_DIR`, `TRAIN_FILES`,
+`VAL_FILES` and `NPU_SMOKE_TEST_IDS` overrides before parallel execution. E2e datasets are isolated under
 each test's log directory. Child groups suppress global cleanup until both have
 finished; use this entry point only in a dedicated test environment. Native aborts
 and log-writing failures remain failures. This experiment is not enabled by the

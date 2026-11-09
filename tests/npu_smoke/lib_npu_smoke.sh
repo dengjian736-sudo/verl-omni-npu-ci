@@ -13,7 +13,11 @@ sep() { printf '%0.s-' {1..78}; echo; }
 
 NPU_SMOKE_GROUP="${NPU_SMOKE_GROUP:?NPU_SMOKE_GROUP must be set}"
 TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
-LOG_DIR="${LOG_DIR:-${REPO_ROOT}/logs/npu_smoke/${NPU_SMOKE_GROUP}/${TIMESTAMP}}"
+if [[ -z "${LOG_DIR:-}" ]]; then
+    NPU_SMOKE_LOG_ROOT="${REPO_ROOT}/logs/npu_smoke/${NPU_SMOKE_GROUP}"
+    mkdir -p "${NPU_SMOKE_LOG_ROOT}"
+    LOG_DIR="$(mktemp -d "${NPU_SMOKE_LOG_ROOT}/${TIMESTAMP}.XXXXXX")"
+fi
 mkdir -p "${LOG_DIR}"
 SUMMARY_LOG="${LOG_DIR}/summary.log"
 
@@ -78,6 +82,25 @@ build_npu_device_list() {
 }
 export ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES:-$(build_npu_device_list "${NUM_NPUS}")}"
 
+export ASCEND_VISIBLE_DEVICES="${ASCEND_VISIBLE_DEVICES:-${ASCEND_RT_VISIBLE_DEVICES}}"
+NPU_SMOKE_TEST_IDS="${NPU_SMOKE_TEST_IDS:-}"
+NPU_SMOKE_REGISTERED_IDS=,
+if [[ -n "${NPU_SMOKE_TEST_IDS}" ]]; then
+    [[ "${NPU_SMOKE_TEST_IDS}" =~ ^(0|[1-9][0-9]*)(,(0|[1-9][0-9]*))*$ ]] || {
+        fail "NPU_SMOKE_TEST_IDS must contain comma-separated canonical IDs."
+        exit 2
+    }
+    IFS=, read -r -a NPU_SMOKE_REQUESTED_IDS <<< "${NPU_SMOKE_TEST_IDS}"
+    npu_smoke_seen=,
+    for npu_smoke_id in "${NPU_SMOKE_REQUESTED_IDS[@]}"; do
+        [[ "${npu_smoke_seen}" != *",${npu_smoke_id},"* ]] || {
+            fail "NPU_SMOKE_TEST_IDS must not repeat IDs."
+            exit 2
+        }
+        npu_smoke_seen+="${npu_smoke_id},"
+    done
+fi
+
 declare -a TEST_IDS=()
 declare -a TEST_NAMES=()
 declare -a TEST_RESULTS=()
@@ -103,6 +126,14 @@ run_test() {
     local id="$1"
     local name="$2"
     shift 2
+    [[ "${NPU_SMOKE_REGISTERED_IDS}" != *",${id},"* ]] || {
+        fail "Test ${id} is registered more than once."
+        return 2
+    }
+    NPU_SMOKE_REGISTERED_IDS+="${id},"
+    if [[ -n "${NPU_SMOKE_TEST_IDS}" && ",${NPU_SMOKE_TEST_IDS}," != *",${id},"* ]]; then
+        return 0
+    fi
     local logfile="${LOG_DIR}/test_${id}.log"
 
     cleanup_runtime
@@ -112,18 +143,16 @@ run_test() {
     log "Log file: ${logfile}"
     sep
 
-    local start_ts end_ts elapsed rc
-    local -a statuses
+    local start_ts end_ts elapsed rc tee_rc
+    local -a pipeline_status
     start_ts="$(date +%s)"
     set +e
     "$@" 2>&1 | tee "${logfile}"
-    statuses=("${PIPESTATUS[@]}")
+    pipeline_status=("${PIPESTATUS[@]}")
+    rc="${pipeline_status[0]}"
+    tee_rc="${pipeline_status[1]}"
     set -e
-    rc="${statuses[0]}"
-    if [[ "${statuses[1]}" -ne 0 ]]; then
-        fail "[${id}] Unable to write test log: tee exit=${statuses[1]}"
-        [[ "${rc}" -ne 0 ]] || rc="${statuses[1]}"
-    fi
+
 
     end_ts="$(date +%s)"
     elapsed=$((end_ts - start_ts))
@@ -131,20 +160,28 @@ run_test() {
     TEST_NAMES+=("${name}")
     TEST_DURATIONS+=("${elapsed}s")
     TEST_LOG_FILES+=("${logfile}")
-    if [[ "${rc}" -eq 0 ]]; then
+    if [[ "${rc}" -eq 0 && "${tee_rc}" -eq 0 ]]; then
         TEST_RESULTS+=("PASS")
         pass "[${id}] ${name}  (${elapsed}s)"
     else
         TEST_RESULTS+=("FAIL")
-        fail "[${id}] ${name}  (${elapsed}s)  exit=${rc}"
+        fail "[${id}] ${name}  (${elapsed}s)  exit=${rc} tee_exit=${tee_rc}"
     fi
 
     return 0
 }
 
 print_summary() {
+    local requested_id
+    for requested_id in "${NPU_SMOKE_REQUESTED_IDS[@]:-}"; do
+        [[ -z "${requested_id}" || "${NPU_SMOKE_REGISTERED_IDS}" == *",${requested_id},"* ]] || {
+            fail "Unknown ${NPU_SMOKE_GROUP} smoke test ID: ${requested_id}"
+            return 2
+        }
+    done
+    [[ "${#TEST_IDS[@]}" -gt 0 ]] || { fail "No smoke tests were selected."; return 2; }
     sep | tee "${SUMMARY_LOG}"
-    echo "  ${NPU_SMOKE_GROUP^^} NPU SMOKE TEST SUMMARY" | tee -a "${SUMMARY_LOG}"
+    printf '  %s NPU SMOKE TEST SUMMARY\n' "$(printf %s "${NPU_SMOKE_GROUP}" | tr '[:lower:]' '[:upper:]')" | tee -a "${SUMMARY_LOG}"
     sep | tee -a "${SUMMARY_LOG}"
 
     local passed=0 failed=0 i result
