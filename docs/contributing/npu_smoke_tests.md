@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/29/2026.
+Last updated: 11/09/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -175,6 +175,27 @@ Run all groups:
 ```bash
 bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 8
 ```
+
+An opt-in single-host experiment runs core on NPUs `0,1` and e2e on
+`2,3,4,5,6,7` in the same dedicated CI container:
+
+```bash
+NPU_SMOKE_PARALLEL=1 bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 8
+```
+
+This allocation uses all eight devices across the groups; it does not test
+eight-rank FSDP in each case. The default sequential command above retains that
+coverage. The groups use independent Ray temporary directories, and the e2e
+trainer uses a master-port range outside the core default. Only e2e performs
+colocated weight transfers, and its trainers remain sequential, retaining the
+existing runtime IPC paths. No runtime source changes are required.
+
+Unset shared `MODEL_PATH`, `TOKENIZER_PATH`, `DATA_DIR`, `TRAIN_FILES` and
+`VAL_FILES` overrides before parallel execution. E2e datasets are isolated under
+each test's log directory. Child groups suppress global cleanup until both have
+finished; use this entry point only in a dedicated test environment. Native aborts
+and log-writing failures remain failures. This experiment is not enabled by the
+GitHub Actions workflow.
 
 Run one group:
 
