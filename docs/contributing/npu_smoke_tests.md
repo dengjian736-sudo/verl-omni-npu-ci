@@ -22,6 +22,14 @@ into these runners:
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 2 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 2 |
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py | 2 |
+| 11 | core | Reward restart determinism and JPEG rule scoring | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 12 | core | Request batching and step-execution output contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 8 |
+| 13 | core | FSDP/FSDP2 engine inference and training with SP=2 | tests/workers/test_diffusers_fsdp_engine_sp_npu.py | 8 |
+| 14 | core | Ulysses SP=2/SP=4 forward and backward equivalence | tests/workers/test_diffusers_ulysses.py | 8 |
+| 15 | core | FSDP2 trainable snapshot restore | tests/workers/test_trainable_snapshot_gpu.py | 8 |
+| 17 | core | Omni tool-agent image generation | tests/agent_loop/test_omni_agent_loop_worker_npu.py | 8 |
+| 28 | core | FSDP2 LoRA adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py | 8 |
+| 30 | core | Image previews and H3 offload placeholders | tests/trainer/diffusion/test_artifact_preview_dump_npu.py; tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
 | 1 | e2e | Qwen-Image FlowGRPO trainer | tests/special_e2e/run_flowgrpo_qwen_image_npu.sh | 8 |
 | 2 | e2e | Wan2.2 DanceGRPO trainer with Qwen2.5-VL reward | tests/special_e2e/run_dancegrpo_wan22_npu.sh | 8 |
 | 18 | e2e | Qwen-Image FlowGRPO V1 sync | tests/special_e2e/run_flowgrpo_qwen_image_v1_npu.sh | 8 |
@@ -30,11 +38,10 @@ into these runners:
 | 21 | e2e | Qwen-Image DiffusionNFT V1 sync | tests/special_e2e/run_diffusionnft_qwen_image_npu.sh | 8 |
 | 22 | e2e | Qwen-Image FlowGRPO V1 separate-async | tests/special_e2e/run_flowgrpo_qwen_image_v1_separate_async_npu.sh | 8 |
 
-The combined runner has 13 entries: six core (0, 3, 4, 5, 6, 7) and seven e2e
-(1, 2, 18, 19, 20, 21, 22). The core group collects seven pytest cases because entry 4 is
-parametrized into request and step execution. The e2e entries each run a
-trainer workload; they are not pytest cases. IDs stay stable across follow-up
-PRs, so gaps in the numbering are intentional.
+The combined runner has 21 entries: 14 core and seven e2e. Stable IDs are
+partitioned by parity for full CI; gaps are intentional. Core entry 14 requires
+four NPUs for SP=4; entry 28 covers FSDP2 and excludes its two FSDP1 parameters.
+Trainer workloads are separate from parameterized pytest cases.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
