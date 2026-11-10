@@ -51,4 +51,5 @@ run_test 28 "dual-adapter LoRA FSDP2 switch and EMA" \
 run_test 30 "named image previews and H3 offload placeholders" \
     python3 -m pytest -q tests/trainer/diffusion/test_artifact_preview_dump_npu.py \
         tests/pipelines/test_minimax_h3_meta_output_npu.py
+cleanup_runtime
 print_summary
