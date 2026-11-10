@@ -147,7 +147,7 @@ class QwenImagePipelineWithDualLogProb(QwenImagePipelineWithLogProb):
         seed = ar_kwargs.pop("seed", None)
         device = torch.device(self.device)
         fork_devices = [device] if seed is not None and device.type != "cpu" else []
-        with torch.random.fork_rng(devices=fork_devices, enabled=seed is not None):
+        with torch.random.fork_rng(devices=fork_devices, enabled=seed is not None, device_type=device.type):
             if seed is not None:
                 _seed_rollout_device(int(seed), device)
 

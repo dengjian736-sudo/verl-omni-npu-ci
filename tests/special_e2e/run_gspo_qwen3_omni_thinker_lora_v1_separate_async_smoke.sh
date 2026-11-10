@@ -37,7 +37,7 @@ EXCLUDE_MODULES=".*talker.*|.*code2wav.*|.*code_predictor.*|.*visual.*|.*audio_t
 # ── Build tiny model ──────────────────────────────────────────────────────────
 MODEL_PATH="${MODEL_PATH:-${HOME}/models/tiny-random/Qwen3-Omni}"
 python3 "${REPO_ROOT}/tests/special_e2e/build_qwen3_omni_tiny_random.py" \
-    --output-dir "${MODEL_PATH}" --force
+    --output-dir "${MODEL_PATH}" --head-dim "${TINY_HEAD_DIM:-32}" --force
 
 # ── Build dummy math dataset if not present ───────────────────────────────────
 if [ ! -f "${DATA_DIR}/train.parquet" ]; then

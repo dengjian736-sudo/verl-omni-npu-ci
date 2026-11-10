@@ -60,6 +60,8 @@ class _FakeAsyncOmni:
         self.sleep_calls: list[dict] = []
         self.wake_calls: list[dict] = []
         self.resumed = 0
+        self.paused = False
+        self.sleeping_tags: set[str] = set()
         # Real-shaped handle: the frontend multimodal cache lives on the
         # renderer, so the fake must expose clear_mm_cache_async there.
         self.mm_clears = 0
@@ -82,19 +84,27 @@ class _FakeAsyncOmni:
     async def pause_generation(self, **kwargs):
         self.calls.append("pause")
         self.pause_calls.append(kwargs)
+        self.paused = True
 
     async def sleep(self, stage_ids=None, level=2, mode="abort"):
         self.calls.append("sleep")
         self.sleep_calls.append({"stage_ids": stage_ids, "level": level, "mode": mode})
+        self.paused = True
+        self.sleeping_tags.update(("weights", "kv_cache"))
         return self.sleep_acks
 
     async def wake_up(self, stage_ids=None, tags=None):
         self.calls.append("wake_up")
         self.wake_calls.append({"stage_ids": stage_ids, "tags": tags})
+        self.sleeping_tags.difference_update(tags if tags is not None else ("weights", "kv_cache"))
         return self.wake_acks
+
+    async def is_sleeping(self, stage_ids=None):
+        return bool(self.sleeping_tags)
 
     async def resume_generation(self, stage_ids=None):
         self.resumed += 1
+        self.paused = False
 
 
 def _make_server(engine, rollout_mode=RolloutMode.HYBRID, node_rank=0, free_cache_engine=True):
@@ -204,6 +214,26 @@ async def test_release_and_resume_kv_cache_route_both_halves_through_delegation(
         {"stage_ids": None, "tags": ["weights"]},  # release: keep weights awake
         {"stage_ids": None, "tags": ["kv_cache"]},  # resume: restore the cache
     ]
+
+
+@pytest.mark.parametrize("mode", [RolloutMode.HYBRID, RolloutMode.COLOCATED])
+@pytest.mark.parametrize("final_tags", [["kv_cache"], None])
+async def test_partial_wake_keeps_admission_paused_until_cache_is_restored(mode, final_tags):
+    engine = _FakeAsyncOmni()
+    server = _make_server(engine, rollout_mode=mode)
+    await server.sleep()
+
+    await server.wake_up(tags=["weights"])
+
+    assert engine.sleeping_tags == {"kv_cache"}
+    assert engine.paused
+    assert engine.resumed == 0
+
+    await server.wake_up(tags=final_tags)
+
+    assert not engine.sleeping_tags
+    assert not engine.paused
+    assert engine.resumed == 1
 
 
 async def test_lifecycle_guards_skip_standalone_and_non_driver_ranks():

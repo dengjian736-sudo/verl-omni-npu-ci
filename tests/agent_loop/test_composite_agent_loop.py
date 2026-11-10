@@ -219,18 +219,11 @@ def init_config() -> DictConfig:
         yield config
 
 
-@pytest.mark.parametrize("agent_reward_loop", [False, True])
-def test_single_turn(init_config, agent_reward_loop: bool):
-    """Smoke-test CompositeAgentLoopWorker end-to-end on Qwen-Image."""
-    ray.init(
-        runtime_env={
-            "env_vars": {
-                "TOKENIZERS_PARALLELISM": "true",
-                "NCCL_DEBUG": "WARN",
-                "VLLM_LOGGING_LEVEL": "INFO",
-            }
-        }
-    )
+def run_composite_single_turn(init_config, agent_reward_loop: bool):
+    """Run the shared GPU/NPU composite single-turn assertions.
+
+    The caller initializes Ray; this function shuts it down.
+    """
     try:
         dit_reward_handle = _FakeRewardLoopWorkerHandle()
         llm_server_manager = LLMServerManager.create(config=init_config)
@@ -387,3 +380,18 @@ def test_single_turn(init_config, agent_reward_loop: bool):
         ray.shutdown()
         gc.collect()
         empty_gpu_cache()
+
+
+@pytest.mark.parametrize("agent_reward_loop", [False, True])
+def test_single_turn(init_config, agent_reward_loop: bool):
+    """Smoke-test CompositeAgentLoopWorker end-to-end on Qwen-Image."""
+    ray.init(
+        runtime_env={
+            "env_vars": {
+                "TOKENIZERS_PARALLELISM": "true",
+                "NCCL_DEBUG": "WARN",
+                "VLLM_LOGGING_LEVEL": "INFO",
+            }
+        }
+    )
+    run_composite_single_turn(init_config, agent_reward_loop)

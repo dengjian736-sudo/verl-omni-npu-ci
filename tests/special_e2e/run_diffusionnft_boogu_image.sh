@@ -31,15 +31,24 @@ python3 - <<'PY'
 import torch
 
 print(f"PyTorch {torch.__version__}, CUDA build {torch.version.cuda}", flush=True)
-if torch.version.cuda is None:
-    raise RuntimeError(
-        "The BOOGU smoke test requires CUDA PyTorch. When building the image "
-        "without a GPU, select an explicit uv --torch-backend matching your "
-        "CUDA stack instead of auto."
-    )
-if not torch.cuda.is_available():
-    raise RuntimeError("CUDA PyTorch is installed, but no usable CUDA device is visible.")
-torch.ones(1, device="cuda").sum().item()
+# Accelerator preflight: CUDA on GPU stacks; Ascend NPU via torch_npu when the
+# CUDA build is absent (CPU-build torch shipped for NPU images).
+if torch.version.cuda is not None:
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA PyTorch is installed, but no usable CUDA device is visible.")
+    torch.ones(1, device="cuda").sum().item()
+else:
+    try:
+        import torch_npu  # noqa: F401
+    except ImportError:
+        raise RuntimeError(
+            "The BOOGU smoke test requires CUDA PyTorch or torch_npu. When building "
+            "the image without a GPU, select an explicit uv --torch-backend matching "
+            "your CUDA stack instead of auto."
+        ) from None
+    if not torch.npu.is_available():
+        raise RuntimeError("torch_npu is installed, but no usable NPU device is visible.")
+    torch.ones(1, device="npu").sum().item()
 
 # An OpenCV import failure can leave cv2/ on sys.path, causing spawned
 # rollout workers to import cv2.typing instead of the standard-library typing

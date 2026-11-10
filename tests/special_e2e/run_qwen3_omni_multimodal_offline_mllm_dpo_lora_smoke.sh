@@ -65,7 +65,7 @@ export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 PROJECT_NAME=verl-test
 EXPERIMENT_NAME=qwen3-omni-multimodal-offline-mllm-dpo-lora-smoke
-CHECKPOINT_DIR="${REPO_ROOT}/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}"
+CHECKPOINT_DIR="${CHECKPOINT_DIR:-${REPO_ROOT}/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}}"
 ADAPTER_PATH="${CHECKPOINT_DIR}/global_step_${TOTAL_TRAINING_STEPS}/actor"
 
 # Thinker-only LoRA: strip talker / code2wav / vision tower / audio tower.
