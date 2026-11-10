@@ -13,6 +13,8 @@
 # limitations under the License.
 """Compare portable Boogu RoPE lookup and gradients with the canonical implementation."""
 
+from types import SimpleNamespace
+
 import pytest
 import torch
 
@@ -21,6 +23,33 @@ from boogu.models.embeddings import apply_rotary_emb
 from boogu.models.transformers.rope import BooguImageDoubleStreamRotaryPosEmbed
 
 from verl_omni.pipelines.boogu_image_flow_grpo.rotary_embedding import BooguImagePortableRotaryPosEmbed
+
+
+@pytest.mark.parametrize("device", ["cpu", "npu"])
+def test_adapter_limits_portable_modules_to_ascend(monkeypatch, device):
+    """Other backends retain canonical module identity; Ascend retains parameters."""
+    from boogu.models.transformers.transformer_boogu import BooguImageTransformer2DModel
+
+    from verl_omni.pipelines.boogu_image_flow_grpo import diffusers_training_adapter as adapter
+
+    module = torch.nn.Module()
+    rope = BooguImageDoubleStreamRotaryPosEmbed(10000, (4, 6, 2), (7, 11, 13))
+    norm = torch.nn.RMSNorm(12)
+    module.rope_embedder = rope
+    module.ref_image_refiner = torch.nn.Sequential(norm)
+    monkeypatch.setattr(BooguImageTransformer2DModel, "from_pretrained", lambda *args, **kwargs: module)
+    monkeypatch.setattr(adapter, "get_device_name", lambda: device)
+    monkeypatch.setattr(adapter, "_make_config_checkpointable", lambda model: None)
+    config = SimpleNamespace(config_path=None, local_path="unused", transformer_subfolder="transformer")
+
+    assert adapter.BooguImage.build_module(config, torch.float32) is module
+    assert module.ref_image_refiner[0].weight is norm.weight
+    if device == "cpu":
+        assert module.rope_embedder is rope
+        assert module.ref_image_refiner[0] is norm
+    else:
+        assert isinstance(module.rope_embedder, BooguImagePortableRotaryPosEmbed)
+        assert type(module.ref_image_refiner[0]) is not type(norm)
 
 
 @pytest.mark.parametrize("frequency_dtype", [torch.complex64, torch.complex128])

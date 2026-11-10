@@ -20,6 +20,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 from verl.utils import tensordict_utils as tu
+from verl.utils.profiler import DistProfiler
 
 from verl_omni.workers.engine_workers import TrainingWorker
 
@@ -61,7 +62,7 @@ def test_training_worker_preserves_multi_axis_positions(monkeypatch, method, pac
         use_fused_kernels=False,
     )
     worker.flops_counter = None
-    worker.profiler = SimpleNamespace(step=lambda: None)
+    worker.profiler = DistProfiler(rank=0)
     worker.loss_fn = object()
     worker.engine = SimpleNamespace(
         train_mode=lambda **kwargs: nullcontext(),
