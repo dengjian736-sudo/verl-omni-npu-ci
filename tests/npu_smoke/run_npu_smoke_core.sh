@@ -24,5 +24,12 @@ run_test 6 "seeded multi-worker rollout reproducibility" \
 run_test 7 "standalone vLLM reward engine startup + OCR scoring" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" NUM_NPUS="${NUM_NPUS}" \
     python3 -m pytest -s tests/reward_loop/test_reward_engine_npu.py
+run_test 16 "composite AR + DiT agent loop (both reward modes)" \
+    python3 -m pytest -s tests/agent_loop/test_composite_agent_loop_npu.py
+run_test 36 "FSDP1 dual-adapter switch and EMA" \
+    env MODEL_PATH="${QWEN_IMAGE_MODEL_PATH:-${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image}" \
+    python3 -m pytest -s tests/workers/test_diffusers_fsdp_lora_adapter.py \
+        --deselect 'tests/workers/test_diffusers_fsdp_lora_adapter.py::test_diffusers_fsdp_lora_adapter_switch[fsdp2]' \
+        --deselect 'tests/workers/test_diffusers_fsdp_lora_adapter.py::test_diffusers_fsdp_lora_adapter_copy_ema[fsdp2]'
 cleanup_runtime
 print_summary

@@ -138,6 +138,7 @@ def test_unbridged_parent_hooks_leave_hold_set():
         model.generate()
 
 
+@pytest.mark.asyncio
 async def test_server_wake_up_resumes_admission_after_ack():
     """A full server wake re-opens admission after successful acknowledgements."""
     server_module = pytest.importorskip("verl_omni.workers.rollout.vllm_rollout.vllm_omni_async_server")

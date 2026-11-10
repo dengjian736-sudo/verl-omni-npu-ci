@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 11/09/2026.
+Last updated: 11/10/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -24,11 +24,29 @@ into these runners:
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py | 8 |
+| 8 | e2e | Qwen3-Omni Thinker GSPO LoRA | tests/special_e2e/run_qwen3_omni_npu.sh gspo | 8 |
+| 9 | e2e | Qwen3-Omni multimodal offline DPO LoRA | tests/special_e2e/run_qwen3_omni_npu.sh offline-dpo | 8 |
+| 10 | e2e | Qwen3-Omni separate-async GSPO LoRA | tests/special_e2e/run_qwen3_omni_npu.sh separate-async | 8 |
+| 16 | core | Composite AR/DiT agent loop, both reward modes | tests/agent_loop/test_composite_agent_loop_npu.py | 8 |
+| 29 | e2e | Qwen3-TTS full-parameter GRPO | tests/special_e2e/run_qwen3_tts_grpo_npu.sh | 8 |
+| 31 | e2e | Boogu-Image DiffusionNFT T2I | tests/special_e2e/run_diffusionnft_boogu_image_npu.sh | 8 |
+| 35 | e2e | SD3 CRD, independent EMA and checkpoint restore | tests/special_e2e/run_crd_sd35_npu.sh | 8 |
+| 36 | core | FSDP1 dual-adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py (`fsdp` parameters) | 8 |
 
-The combined runner has eight entries: six core (0, 3, 4, 5, 6, 7) and two e2e
-(1, 2). The core group collects seven pytest cases because entry 4 is
-parametrized into request and step execution. The two e2e entries each run a
-trainer workload; they are not pytest cases.
+The combined runner has 16 entries: eight core and eight e2e. Core collects
+11 pytest cases, including the two reward modes of entry 16 and the two FSDP1
+adapter checks in entry 36. E2e entries run trainer workloads; entry 35 also
+checks distributed update parity and exact checkpoint restoration.
+
+Entries 8/10 check text-only GSPO; entry 9 exercises image/video/audio data and
+offline DPO. Entries 8/9 retain two updates each, and separate-async entry 10
+retains three updates.
+Entry 29 runs two full-parameter TTS updates with a test-local duration reward.
+Entry 31 retains four NFT updates; its FlowGRPO and image-edit variants remain
+available through the model launchers. These are execution smokes, not quality
+or convergence checks. CI installs pinned optional model packages and caches
+source assets before offline execution. Local runs need the same media helpers,
+SoX and cached assets; `prepare_model_smoke.sh --check-only` checks the imports.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -122,7 +140,7 @@ Add core tests to run_npu_smoke_core.sh and trainer tests to
 run_npu_smoke_e2e.sh. Assign an unused numeric ID and call run_test:
 
 ```bash
-run_test 8 "my NPU smoke test" \
+run_test 99 "my NPU smoke test" \
     env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" \
         NUM_NPUS="${NUM_NPUS}" \
     python3 -m pytest -s tests/workers/test_my_npu_feature.py
@@ -149,8 +167,8 @@ only when all selected groups pass.
 If the new test lives outside current path filters, add its path. Current
 filters include verl_omni/**, tests/npu_smoke/**, tests/agent_loop/**,
 tests/reward_loop/**, tests/workers/**, tests/special_e2e/**, pyproject.toml,
-.github/workflows/npu_smoke.yml,
-and .github/vllm_omni_pin.txt.
+.github/workflows/npu_smoke.yml, .github/vllm_omni_pin.txt,
+.github/qwen_tts_pin.txt and .github/boogu_image_pin.txt.
 
 ### 5. Handle models and datasets
 

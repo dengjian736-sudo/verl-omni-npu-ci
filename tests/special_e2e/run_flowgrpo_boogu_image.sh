@@ -98,13 +98,13 @@ else
 fi
 
 python3 -m verl_omni.trainer.main_diffusion \
-    data.train_files=${dummy_train_path} \
-    data.val_files=${dummy_test_path} \
+    "data.train_files=${dummy_train_path}" \
+    "data.val_files=${dummy_test_path}" \
     data.train_batch_size=${train_batch_size} \
     data.max_prompt_length=${max_prompt_length} \
     actor_rollout_ref.model.algorithm=flow_grpo \
-    actor_rollout_ref.model.path=${MODEL_PATH} \
-    actor_rollout_ref.model.tokenizer_path=${TOKENIZER_PATH} \
+    "actor_rollout_ref.model.path=${MODEL_PATH}" \
+    "actor_rollout_ref.model.tokenizer_path=${TOKENIZER_PATH}" \
     actor_rollout_ref.model.trust_remote_code=True \
     actor_rollout_ref.model.attn_backend=${ATTN_BACKEND} \
     actor_rollout_ref.rollout.rollout_attn_backend=${ROLLOUT_ATTN_BACKEND} \

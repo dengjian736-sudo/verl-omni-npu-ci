@@ -61,6 +61,7 @@ def test_training_worker_preserves_multi_axis_positions(monkeypatch, method, pac
         use_fused_kernels=False,
     )
     worker.flops_counter = None
+    worker.profiler = SimpleNamespace(step=lambda: None)
     worker.loss_fn = object()
     worker.engine = SimpleNamespace(
         train_mode=lambda **kwargs: nullcontext(),

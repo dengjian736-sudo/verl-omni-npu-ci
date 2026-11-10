@@ -14,6 +14,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib_npu_e2e.sh"
 
 export NUM_GPUS="${NUM_NPUS}"
+if [[ -n "${BOOGU_MODEL_PATH:-}" && ! -f "${BOOGU_MODEL_PATH}/model_index.json" ]]; then
+    echo "BOOGU_MODEL_PATH must point at an existing Boogu pipeline." >&2
+    exit 2
+fi
 export MODEL_PATH="${BOOGU_MODEL_PATH:-${HOME}/.cache/verl-omni-npu-smoke/Boogu-Image}"
 export TOKENIZER_PATH="${BOOGU_TOKENIZER_PATH:-${MODEL_PATH}/processor}"
 export DATA_DIR="${BOOGU_DATA_DIR:-${HOME}/data/flowgrpo_boogu_npu/$(date +%Y%m%d_%H%M%S)_$$}"
